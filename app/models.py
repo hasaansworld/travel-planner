@@ -37,7 +37,7 @@ class POICount(SQLModel, table=True):
     city_id: Optional[int] = Field(default=None, foreign_key="city.city_id")
     
 
-class UserVist(SQLModel, table=True):
+class UserVisit(SQLModel, table=True):
     __tablename__:str = "user_visits"
     
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -48,6 +48,16 @@ class UserVist(SQLModel, table=True):
     day: int = Field(ge=0, le=75)
     time_slot: int = Field(ge=0, le=48)  # Constrain to 0-48 range
     recorded_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    
+class UserFrequency(SQLModel, table=True):
+    __tablename__:str = "user_freq"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.user_id")
+    city_id: Optional[int] = Field(default=1)
+    time_slot: int = Field(ge=0, le=47)
+    poi_category_id: int = Field(foreign_key="categories.category_id")
+    count: int = Field(default=0)
     
 # Pydantic models for API responses (optional but recommended)
 class UserRead(SQLModel):
