@@ -20,35 +20,106 @@ app = FastAPI(
 
 # POI category mapping for OSM tags
 POI_CATEGORIES = {
-    "restaurant": {"amenity": "restaurant"},
+    # Food categories
+    "food": {"amenity": "restaurant"},
     "japanese restaurant": {"amenity": "restaurant", "cuisine": "japanese"},
-    "italian restaurant": {"amenity": "restaurant", "cuisine": "italian"},
+    "western restaurant": {"amenity": "restaurant", "cuisine": ["american", "european", "french", "italian"]},
+    "eat all you can restaurant": {"amenity": "restaurant", "diet": "buffet"},
     "chinese restaurant": {"amenity": "restaurant", "cuisine": "chinese"},
-    "park": {"leisure": "park"},
-    "hospital": {"amenity": "hospital"},
-    "school": {"amenity": "school"},
-    "bank": {"amenity": "bank"},
-    "pharmacy": {"amenity": "pharmacy"},
-    "gas station": {"amenity": "fuel"},
-    "hotel": {"tourism": "hotel"},
-    "museum": {"tourism": "museum"},
-    "attraction": {"tourism": "attraction"},
-    "cafe": {"amenity": "cafe"},
+    "indian restaurant": {"amenity": "restaurant", "cuisine": "indian"},
+    "ramen restaurant": {"amenity": "restaurant", "cuisine": "ramen"},
+    "curry restaurant": {"amenity": "restaurant", "cuisine": "curry"},
+    "bbq restaurant": {"amenity": "restaurant", "cuisine": "barbecue"},
+    "hot pot restaurant": {"amenity": "restaurant", "cuisine": "hot_pot"},
     "bar": {"amenity": "bar"},
+    "diner": {"amenity": "restaurant", "restaurant": "diner"},
+    "creative cuisine": {"amenity": "restaurant", "cuisine": "fusion"},
+    "organic cuisine": {"amenity": "restaurant", "organic": "yes"},
+    "pizza": {"amenity": "restaurant", "cuisine": "pizza"},
+    "café": {"amenity": "cafe"},
+    "tea salon": {"amenity": "cafe", "cuisine": "tea"},
+    "bakery": {"shop": "bakery"},
+    "sweets": {"shop": "confectionery"},
+    "wine bar": {"amenity": "bar", "bar": "wine_bar"},
     "pub": {"amenity": "pub"},
-    "supermarket": {"shop": "supermarket"},
-    "mall": {"shop": "mall"},
-    "gym": {"leisure": "fitness_centre"},
-    "library": {"amenity": "library"},
-    "cinema": {"amenity": "cinema"},
-    "theatre": {"amenity": "theatre"},
-    "church": {"amenity": "place_of_worship", "religion": "christian"},
-    "mosque": {"amenity": "place_of_worship", "religion": "muslim"},
-    "temple": {"amenity": "place_of_worship", "religion": "buddhist"},
-    "atm": {"amenity": "atm"},
+    "disco": {"amenity": "nightclub"},
+    "beer garden": {"amenity": "biergarten"},
+    "fast food": {"amenity": "fast_food"},
+    "karaoke": {"amenity": "karaoke_box"},
+    "cruising": {"tourism": "attraction", "attraction": "cruise"},
+    "theme park restaurant": {"amenity": "restaurant", "tourism": "theme_park"},
+    "amusement restaurant": {"amenity": "restaurant", "leisure": "amusement_arcade"},
+    "other restaurants": {"amenity": "restaurant"},
+
+    # Shopping categories
+    "shopping": {"shop": True},
+    "glasses": {"shop": "optician"},
+    "drug store": {"shop": "chemist"},
+    "electronics store": {"shop": "electronics"},
+    "diy store": {"shop": "doityourself"},
+    "convenience store": {"shop": "convenience"},
+    "recycle shop": {"shop": "second_hand"},
+    "interior shop": {"shop": "interior_decoration"},
+    "sports store": {"shop": "sports"},
+    "clothes store": {"shop": "clothes"},
+    "grocery store": {"shop": "supermarket"},
+    "online grocery store": {"shop": "supermarket", "service": "online"},
+    "retail store": {"shop": True},
+
+    # Entertainment categories
+    "entertainment": {"leisure": True},
+    "sports recreation": {"leisure": "sports_centre"},
+    "game arcade": {"leisure": "amusement_arcade"},
+    "swimming pool": {"leisure": "swimming_pool"},
+    "casino": {"amenity": "casino"},
+
+    # Accommodation & Transport
+    "hotel": {"tourism": "hotel"},
+    "park": {"leisure": "park"},
+    "transit station": {"public_transport": "station"},
+    "parking area": {"amenity": "parking"},
+
+    # Healthcare
+    "hospital": {"amenity": "hospital"},
+    "pharmacy": {"amenity": "pharmacy"},
+    "chiropractic": {"healthcare": "chiropractic"},
+    "elderly care home": {"amenity": "social_facility", "social_facility": "nursing_home"},
+    "vet": {"amenity": "veterinary"},
+
+    # Education
+    "school": {"amenity": "school"},
+    "cram school": {"amenity": "school", "school:type": "cramming"},
+    "kindergarten": {"amenity": "kindergarten"},
+    "driving school": {"amenity": "driving_school"},
+
+    # Services
+    "real estate": {"office": "estate_agent"},
+    "home appliances": {"shop": "houseware"},
     "post office": {"amenity": "post_office"},
-    "police": {"amenity": "police"},
-    "fire station": {"amenity": "fire_station"},
+    "laundry": {"shop": "laundry"},
+    "wedding ceremony": {"amenity": "place_of_worship"},
+    "cemetary": {"landuse": "cemetery"},
+    "bank": {"amenity": "bank"},
+    "hot spring": {"leisure": "resort", "resort": "hot_spring"},
+    "hair salon": {"shop": "hairdresser"},
+    "lawyer office": {"office": "lawyer"},
+    "recruitment office": {"office": "employment_agency"},
+    "city hall": {"amenity": "townhall"},
+    "community center": {"amenity": "community_centre"},
+    "church": {"amenity": "place_of_worship", "religion": "christian"},
+    "accountant office": {"office": "accountant"},
+    "it office": {"office": "it"},
+    "publisher office": {"office": "publisher"},
+
+    # Industry & Specialized
+    "building material": {"shop": "trade"},
+    "gardening": {"shop": "garden_centre"},
+    "heavy industry": {"landuse": "industrial"},
+    "npo": {"office": "ngo"},
+    "utility copany": {"office": "company", "operator:type": "public"},
+    "port": {"landuse": "port"},
+    "research facility": {"amenity": "research_institute"},
+    "fishing": {"leisure": "fishing"},
 }
 
 @app.get("/")
@@ -95,6 +166,7 @@ async def search_poi(
         
         # Get OSM tags for the category
         tags = POI_CATEGORIES[category_lower]
+        print(f"Using tags: {tags}")
         
         # Use point-based query which is more efficient and respects the radius better
         try:
@@ -194,21 +266,46 @@ async def search_poi(
                     }
                     
                     # Add category-specific fields with validation
-                    if category_lower in ["restaurant", "japanese restaurant", "italian restaurant", "chinese restaurant"]:
+                    if "restaurant" in category_lower or category_lower in ["food"]:
                         cuisine = poi.get("cuisine", "")
                         if isinstance(cuisine, float) and math.isnan(cuisine):
                             cuisine = ""
                         poi_data["cuisine"] = str(cuisine)
+                        
+                        diet = poi.get("diet", "")
+                        if isinstance(diet, float) and math.isnan(diet):
+                            diet = ""
+                        poi_data["diet"] = str(diet)
+                        
                     elif category_lower == "hotel":
                         stars = poi.get("stars", "")
                         if isinstance(stars, float) and math.isnan(stars):
                             stars = ""
                         poi_data["stars"] = str(stars)
-                    elif category_lower in ["church", "mosque", "temple"]:
+                        
+                    elif category_lower == "church":
                         religion = poi.get("religion", "")
                         if isinstance(religion, float) and math.isnan(religion):
                             religion = ""
                         poi_data["religion"] = str(religion)
+                        
+                    elif "store" in category_lower or "shop" in category_lower or category_lower == "shopping":
+                        shop_type = poi.get("shop", "")
+                        if isinstance(shop_type, float) and math.isnan(shop_type):
+                            shop_type = ""
+                        poi_data["shop_type"] = str(shop_type)
+                        
+                    elif category_lower in ["hospital", "pharmacy", "chiropractic", "elderly care home"]:
+                        healthcare = poi.get("healthcare", "")
+                        if isinstance(healthcare, float) and math.isnan(healthcare):
+                            healthcare = ""
+                        poi_data["healthcare_type"] = str(healthcare)
+                        
+                    elif "office" in category_lower:
+                        office_type = poi.get("office", "")
+                        if isinstance(office_type, float) and math.isnan(office_type):
+                            office_type = ""
+                        poi_data["office_type"] = str(office_type)
                     
                     poi_list.append(poi_data)
                     
