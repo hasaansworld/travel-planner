@@ -17,6 +17,8 @@ from dotenv import load_dotenv
 from sqlmodel import Session, asc, desc, select
 from app.database import get_session
 from app.models import Category, UserFrequency
+import json
+from app.utils import generate_llm_response
 
 load_dotenv()
 
@@ -149,12 +151,12 @@ async def get_yelp_business_details(session: aiohttp.ClientSession, business_id:
                     "yelp_hours": hours_info["formatted_hours"],
                     "yelp_closing_time_today": hours_info["closing_time_today"],
                     "yelp_is_open_now": hours_info["is_open_now"],
-                    "yelp_transactions": data.get("transactions", []),
-                    "yelp_location": data.get("location", {}),
-                    "yelp_coordinates": data.get("coordinates", {})
+                    # "yelp_transactions": data.get("transactions", []),
+                    # "yelp_location": data.get("location", {}),
+                    # "yelp_coordinates": data.get("coordinates", {})
                 }
             else:
-                logger.warning(f"Yelp API error for business {business_id}: {response.status}, {response.text}")
+                logger.warning(f"Yelp API error for business {business_id}: {response.status}")
                 
     except Exception as e:
         logger.error(f"Error getting Yelp business details for {business_id}: {e}")
@@ -179,6 +181,7 @@ async def search_yelp_business(session: aiohttp.ClientSession, name: str, latitu
         return {}
     
     try:
+        print(f"Searching Yelp for business: {name} at ({latitude}, {longitude}) with category '{category}'")
         # Clean up the name for search
         search_name = name.replace("Unknown", "").strip()
         if not search_name:
@@ -256,14 +259,8 @@ async def search_yelp_business(session: aiohttp.ClientSession, name: str, latitu
                         "yelp_id": best_match.get("id", ""),
                         "yelp_name": best_match.get("name", ""),
                         "yelp_rating": best_match.get("rating", 0),
-                        # "yelp_review_count": best_match.get("review_count", 0),
-                        # "yelp_price": best_match.get("price", ""),
-                        # "yelp_url": best_match.get("url", ""),
-                        # "yelp_image_url": best_match.get("image_url", ""),
                         "yelp_categories": [cat.get("title", "") for cat in best_match.get("categories", [])],
-                        # "yelp_phone": best_match.get("display_phone", ""),
                         "yelp_is_closed": best_match.get("is_closed", False),
-                        # "match_score": round(best_score, 2)
                     }
                     
                     # Get detailed info including hours
@@ -278,7 +275,7 @@ async def search_yelp_business(session: aiohttp.ClientSession, name: str, latitu
                             "yelp_hours": "Hours not available",
                             "yelp_closing_time_today": None,
                             "yelp_is_open_now": None
-                        })
+                        })  # Small delay to respect rate limits
                     
                     return basic_info
                     
@@ -307,7 +304,7 @@ async def enrich_pois_with_yelp(poi_list: List[Dict[str, Any]]) -> List[Dict[str
     
     async with aiohttp.ClientSession() as session:
         # Process POIs in batches to respect rate limits
-        batch_size = 2  # Reduced batch size due to additional API calls
+        batch_size = 1  # Reduced batch size due to additional API calls
         for i in range(0, len(poi_list), batch_size):
             batch = poi_list[i:i + batch_size]
             tasks = []
@@ -318,7 +315,7 @@ async def enrich_pois_with_yelp(poi_list: List[Dict[str, Any]]) -> List[Dict[str
                     name=poi["name"],
                     latitude=poi["latitude"],
                     longitude=poi["longitude"],
-                    category=poi["category"]
+                    category=poi.get("category", "")
                 )
                 tasks.append(task)
             
@@ -330,6 +327,10 @@ async def enrich_pois_with_yelp(poi_list: List[Dict[str, Any]]) -> List[Dict[str
                 enhanced_poi = poi.copy()
                 
                 if isinstance(yelp_data, dict) and yelp_data:
+                    # Convert time object to string before adding to enhanced_poi
+                    if 'yelp_closing_time_today' in yelp_data and yelp_data['yelp_closing_time_today']:
+                        yelp_data['yelp_closing_time_today'] = yelp_data['yelp_closing_time_today'].strftime('%H:%M')
+    
                     enhanced_poi.update(yelp_data)
                     # Add sorting priority based on rating and review count
                     rating = yelp_data.get("yelp_rating", 0)
@@ -340,7 +341,11 @@ async def enrich_pois_with_yelp(poi_list: List[Dict[str, Any]]) -> List[Dict[str
                     # Add closing time sort value (minutes from midnight)
                     closing_time = yelp_data.get("yelp_closing_time_today")
                     if closing_time:
-                        enhanced_poi["closing_time_minutes"] = closing_time.hour * 60 + closing_time.minute
+                        if isinstance(closing_time, str):
+                            hour, minute = map(int, closing_time.split(':'))
+                            enhanced_poi["closing_time_minutes"] = hour * 60 + minute
+                        else:
+                            enhanced_poi["closing_time_minutes"] = closing_time.hour * 60 + closing_time.minute
                     else:
                         enhanced_poi["closing_time_minutes"] = 9999  # Places without hours go to end
                         
@@ -348,90 +353,41 @@ async def enrich_pois_with_yelp(poi_list: List[Dict[str, Any]]) -> List[Dict[str
                     # Default values for POIs without Yelp data
                     enhanced_poi.update({
                         "yelp_rating": 0,
-                        # "yelp_review_count": 0,
-                        # "yelp_price": "", 
-                        # "yelp_url": "",
-                        # "yelp_image_url": "",
-                        # "yelp_categories": [],
-                        # "yelp_phone": "",
                         "yelp_is_closed": False,
                         "yelp_hours": "Hours not available",
                         "yelp_closing_time_today": None,
                         "yelp_is_open_now": None,
-                        # "sort_score": 0,
-                        # "closing_time_minutes": 9999
                     })
                 
                 enriched_pois.append(enhanced_poi)
             
             # Small delay between batches to respect rate limits
             if i + batch_size < len(poi_list):
-                await asyncio.sleep(0.2)  # Increased delay due to additional API calls
+                await asyncio.sleep(0.4)  # Increased delay due to additional API calls
     
     return enriched_pois
 
-@app.get("/")
-async def root():
-    return "Hello World! This is a travel planner with Yelp integration"
-
-# @app.get("/poi/categories")
-# async def get_poi_categories():
-#     """Get list of available POI categories"""
-#     return {
-#         "categories": list(POI_CATEGORIES.keys()),
-#         "total": len(POI_CATEGORIES),
-#         "yelp_integration": YELP_API_KEY is not None
-#     }
-
-@app.get("/poi/search")
-async def search_poi(
-    lat: float = Query(..., description="Latitude", ge=-90, le=90),
-    lon: float = Query(..., description="Longitude", ge=-180, le=180),
-    search_tag: dict[str, bool | str | list[str]] = Query(..., description="Search tags for osmnx search"),
-    radius_km: float = Query(10, description="Search radius in kilometers", gt=0, le=50),
-    sort_by: str = Query("closing_time", description="Sort by: 'closing_time', 'rating', 'distance', 'review_count'")
-):
+# Function that will be available to OpenAI for function calling
+async def search_poi_for_ai(
+    search_tag: dict,
+    lat: float,
+    lon: float,
+    radius_km: float = 10,
+    rating: float = 4.0,
+    sort_by: str = "closing_time"
+) -> Dict[str, Any]:
     """
-    Search for Points of Interest (POI) within a specified radius with Yelp ratings and hours
-    
-    Args:
-        lat: Latitude of the search center
-        lon: Longitude of the search center
-        search_tag: Search tags for osmnx search
-        radius_km: Search radius in kilometers (max 50km)
-        sort_by: Sort results by 'closing_time', 'rating', 'distance', or 'review_count'
-    
-    Returns:
-        List of POIs with their details, Yelp ratings, and hours information
+    Search for POIs - this function will be called by OpenAI
     """
     try:
-        # Validate category
-        # category_lower = category.lower().strip()
-        # if category_lower not in POI_CATEGORIES:
-        #     raise HTTPException(
-        #         status_code=400, 
-        #         detail=f"Category '{category}' not supported. Use /poi/categories to see available categories."
-        #     )
-        
-        # Validate sort_by parameter
-        valid_sort_options = ["closing_time", "rating", "distance", "review_count"]
-        if sort_by not in valid_sort_options:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid sort_by parameter. Must be one of: {valid_sort_options}"
-            )
-        
-        # logger.info(f"Searching for {category_lower} near ({lat}, {lon}) within {radius_km}km")
-        
-        # Get OSM tags for the category
-        tags = search_tag
-        print(f"Using tags: {tags}")
-        
-        # Use point-based query which is more efficient and respects the radius better
+        # Get OSM tags for the search
+        print(f"Params received: search_tag={search_tag}, lat={lat}, lon={lon}, radius_km={radius_km}, rating={rating}, sort_by={sort_by}")
+        print("Searching for POIs with tags:", search_tag, type(search_tag))
+        # Use point-based query
         try:
             pois = ox.features_from_point(
                 center_point=(lat, lon),
-                tags=tags,
+                tags=search_tag,
                 dist=radius_km * 1000  # Convert to meters
             )
         except Exception as e:
@@ -474,7 +430,6 @@ async def search_poi(
                 # Validate coordinates are not NaN or infinite
                 if (math.isnan(lat_coord) or math.isnan(lon_coord) or 
                     math.isinf(lat_coord) or math.isinf(lon_coord)):
-                    logger.warning(f"Invalid coordinates for POI {idx}: ({lat_coord}, {lon_coord})")
                     continue
                 
                 poi_coords = (lat_coord, lon_coord)
@@ -484,7 +439,6 @@ async def search_poi(
                 
                 # Validate distance
                 if math.isnan(distance) or math.isinf(distance):
-                    logger.warning(f"Invalid distance calculated for POI {idx}")
                     continue
                 
                 # Filter by radius
@@ -495,18 +449,6 @@ async def search_poi(
                         name = "Unknown"
                     
                     # Get and validate other fields
-                    address = poi.get("addr:full") or poi.get("addr:street", "")
-                    if isinstance(address, float) and math.isnan(address):
-                        address = ""
-                    
-                    phone = poi.get("phone", "")
-                    if isinstance(phone, float) and math.isnan(phone):
-                        phone = ""
-                    
-                    website = poi.get("website", "")
-                    if isinstance(website, float) and math.isnan(website):
-                        website = ""
-                    
                     opening_hours = poi.get("opening_hours", "")
                     if isinstance(opening_hours, float) and math.isnan(opening_hours):
                         opening_hours = ""
@@ -516,56 +458,63 @@ async def search_poi(
                         "latitude": round(float(lat_coord), 6),
                         "longitude": round(float(lon_coord), 6),
                         "distance_km": round(float(distance), 2),
-                        # "category": category_lower,
-                        # "address": str(address),
-                        # "phone": str(phone),
-                        # "website": str(website),
                         "opening_hours": str(opening_hours),
-                        # "osm_id": str(idx) if idx is not None else "unknown"
                     }
                     
+                    poi_list.append(poi_data)
                     
             except Exception as e:
                 logger.warning(f"Error processing POI {idx}: {e}")
                 continue
         
+        print(f"Found {len(poi_list)} POIs within {radius_km}km of ({lat}, {lon}). Here are the details:", poi_list)
         # Enrich with Yelp data
         enriched_poi_list = await enrich_pois_with_yelp(poi_list)
         
+        # Filter by rating if specified
+        if rating > 0:
+            enriched_poi_list = [poi for poi in enriched_poi_list if poi.get("yelp_rating", 0) >= rating]
+        
         # Sort based on the requested criteria
         if sort_by == "closing_time":
-            # Sort by closing time (earliest closing first), then by rating, then by distance
             enriched_poi_list.sort(key=lambda x: (x.get("closing_time_minutes", 9999), -x.get("yelp_rating", 0), x["distance_km"]))
         elif sort_by == "rating":
-            # Sort by sort_score (weighted rating), then by rating, then by distance
-            enriched_poi_list.sort(key=lambda x: (-x.get("sort_score", 0), -x.get("yelp_rating", 0), x["distance_km"]))
-        elif sort_by == "review_count":
-            # Sort by review count, then by rating, then by distance
-            enriched_poi_list.sort(key=lambda x: (-x.get("yelp_review_count", 0), -x.get("yelp_rating", 0), x["distance_km"]))
-        else:  # sort_by == "distance"
-            # Sort by distance, then by rating
+            enriched_poi_list.sort(key=lambda x: (-x.get("yelp_rating", 0), x["distance_km"]))
+        elif sort_by == "distance":
             enriched_poi_list.sort(key=lambda x: (x["distance_km"], -x.get("yelp_rating", 0)))
         
         return {
             "pois": enriched_poi_list,
-            "count": len(enriched_poi_list),
-            # "search_params": {
-            #     "latitude": lat,
-            #     "longitude": lon,
-            #     "category": category_lower,
-            #     "radius_km": radius_km,
-            #     "sort_by": sort_by
-            # },
-            # "yelp_integration_enabled": YELP_API_KEY is not None,
-            # "total_with_yelp_data": sum(1 for poi in enriched_poi_list if poi.get("yelp_rating", 0) > 0)
+            "count": len(enriched_poi_list)
         }
         
-    except HTTPException:
-        raise
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON format for search_tag")
+    
     except Exception as e:
-        logger.error(f"Unexpected error in POI search: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        logger.error(f"Error in search_poi_for_ai: {e}")
+        return {
+            "pois": [],
+            "count": 0,
+            "message": f"Error: {str(e)}"
+        }
 
+@app.get("/")
+async def root():
+    return "Hello World! This is a travel planner with Yelp integration"
+
+@app.get("/poi/search")
+async def search_poi(
+    lat: float = Query(..., description="Latitude", ge=-90, le=90),
+    lon: float = Query(..., description="Longitude", ge=-180, le=180),
+    search_tag: str = Query(..., description="Search tags for osmnx search"),
+    radius_km: float = Query(10, description="Search radius in kilometers", gt=0, le=50),
+    sort_by: str = Query("closing_time", description="Sort by: 'closing_time', 'rating', 'distance', 'review_count'")
+):
+    """
+    Search for Points of Interest (POI) within a specified radius with Yelp ratings and hours
+    """
+    return await search_poi_for_ai(search_tag, lat, lon, radius_km, 0, sort_by)
 
 @app.get("/plan")
 async def get_plan(
@@ -579,7 +528,7 @@ async def get_plan(
     session: Session = Depends(get_session)
 ):
     try:
-        # Build the query with join
+        # Get user activity data
         query = (
             select(
                 UserFrequency.time_slot,
@@ -612,11 +561,212 @@ async def get_plan(
                 time_slot_categories[time_slot].append(category_name)
         
         # Convert defaultdict to regular dict and ensure consistent ordering
-        result = dict(sorted(time_slot_categories.items()))
+        user_activity = dict(sorted(time_slot_categories.items()))
         
-        return result
+        # Define the function schema for OpenAI
+        function_schema = {
+            "name": "search_poi",
+            "description": "Search for Points of Interest using OSM tags. Use this to find specific types of places like restaurants, shops, attractions, etc.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "search_tag": {
+                        "type": "string",
+                        "description": "Pass json object as string. OSM tags to search for. Examples: {'amenity': 'restaurant'}, {'shop': 'supermarket'}, {'tourism': 'attraction'}, {'leisure': 'park'}, {'amenity': ['cafe', 'bar']}"
+                    },
+                    "sort_by": {
+                        "type": "string",
+                        "enum": ["closing_time", "rating", "distance"],
+                        "description": "How to sort the results. Use 'closing_time' to prioritize places that close soon."
+                    }
+                },
+                "required": ["search_tag"]
+            }
+        }
         
+        # Prepare the system message
+        system_message = """You are a comprehensive travel planner AI that creates diverse, full-day itineraries. You will receive a user's mobility history showing their top 3 preferred activity categories for each 30-minute time slot throughout the day (48 time slots total).
+
+            ## Core Requirements:
+
+            ### 1. Activity Pattern Analysis
+            - Analyze the user's activity patterns across all 48 time slots (0-47, each representing 30 minutes)
+            - Identify peak activity times, preferred categories, and natural flow patterns
+            - Consider the user's stated intent alongside their historical preferences
+
+            ### 2. Diverse POI Search Strategy
+            **RECOMMENDED**: Unless the user specifies otherwise, search for AT LEAST 6 different POI categories using multiple search_poi calls:
+            - **Food & Dining**: restaurants, cafes, bars, food trucks, bakeries
+            - **Entertainment**: cinemas, theaters, music venues, gaming centers
+            - **Shopping**: malls, markets, boutiques, specialty stores
+            - **Culture & Tourism**: museums, galleries, historical sites, landmarks
+            - **Recreation**: parks, sports facilities, beaches, outdoor activities
+            - **Services**: spas, fitness centers, libraries, co-working spaces
+
+            **Search Strategy**:
+            - Make 6-8 separate search_poi calls with different tags
+            - Use varied OSM format tags for each category:
+            - Food: {'amenity': 'restaurant'}, {'amenity': 'cafe'}, {'amenity': 'bar'}
+            - Shopping: {'shop': 'mall'}, {'shop': 'supermarket'}, {'shop': 'clothes'}
+            - Culture: {'tourism': 'attraction'}, {'tourism': 'museum'}, {'amenity': 'library'}
+            - Recreation: {'leisure': 'park'}, {'leisure': 'sports_centre'}, {'natural': 'beach'}
+            - Entertainment: {'amenity': 'cinema'}, {'amenity': 'theatre'}
+            - Services: {'leisure': 'spa'}, {'amenity': 'gym'}
+
+            ### 3. Comprehensive Plan Requirements
+            - **Minimum 12-15 places** (unless user specifies fewer)
+            - **Balanced distribution**: When searching multiple categories, no single category should dominate (max 30% of total places)
+            - **Respect user intent**: If user specifies particular focus areas, prioritize those while still providing some variety
+            - **Time-appropriate activities**: Match activities to typical operating hours and user patterns
+            - **Logical flow**: Consider travel time and geographic proximity
+            - **Complete day coverage**: Include breakfast, lunch, dinner, and activities throughout the day
+
+            ### 4. Enhanced Recommendation Logic
+            - **Priority factors** (in order):
+            1. User's stated intent and goals
+            2. Historical activity patterns from mobility data
+            3. Time-appropriate venue hours
+            4. Geographic proximity and travel efficiency
+            5. Venue popularity and ratings
+
+            ### 5. Markdown Format (STRICT)
+            For each place, use exactly this format:
+
+            ## [Place Name]
+            **Time:** [Recommended visit time]
+            **Distance:** [Distance from previous location]
+            **Yelp Rating:** [Rating/5 stars]
+            **Reason:** [Why this place matches user preferences and fits the itinerary]
+
+            ### 6. Quality Assurance Checklist
+            Before finalizing, ensure:
+            - [ ] Multiple POI categories represented (aim for 6+ unless user specifies otherwise)
+            - [ ] 12-15 total places recommended (adjust based on user needs)
+            - [ ] When using multiple categories, no category exceeds 30% of total recommendations
+            - [ ] User's specific requests are prioritized
+            - [ ] Logical time progression throughout the day
+            - [ ] Includes meals (breakfast, lunch, dinner)
+            - [ ] Activities match user's historical patterns
+            - [ ] All places have proper formatting
+
+            ## Example Search Sequence:
+            1. search_poi({'amenity': 'restaurant'}) 
+            2. search_poi({'tourism': 'attraction'})
+            3. search_poi({'shop': 'mall'})
+            4. search_poi({'leisure': 'park'})
+            5. search_poi({'amenity': 'cafe'})
+            6. search_poi({'amenity': 'cinema'})
+            7. search_poi({'amenity': 'bar'})
+            8. search_poi({'tourism': 'museum'})
+
+            Remember: Diversity is encouraged to create rich, varied experiences, but always prioritize the user's stated preferences and intent. When no specific focus is given, aim for variety that goes beyond the user's top preferences to introduce them to new experiences while respecting their core interests."""
+
+        # Prepare the user message
+        user_message = f"""User Activity History:
+            {json.dumps(user_activity, indent=2)}
+
+            Location: Latitude {lat}, Longitude {lon}
+            Search radius: {radius_km} km
+            Minimum rating: {rating}
+            Intent: {intent}
+
+            Please create a personalized travel plan for this user based on their activity history and travel intent. Use the search_poi function to find relevant places."""
+
+        # Create the messages for OpenAI
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
+        ]
+        
+        print(f"Messages for OpenAI: {json.dumps(messages, indent=2)}")
+
+        # Make the initial call to OpenAI
+        try:
+            response = generate_llm_response(
+                messages=messages,
+                model_name="gpt-4.1",
+                temperature=0.7,
+                function_schema=function_schema,
+            )
+
+            print(f"Raw response from OpenAI: {response}")
+            
+            # Check if the AI wants to make function calls
+            if "function_call" in response:
+                # Handle function calls
+                function_results = []
+                
+                func_call = response["function_call"]
+                print(f"Function call detected: {func_call}")
+                if func_call["name"] == "search_poi":
+                    search_params = func_call["arguments"]
+                    
+                    # Add default sort_by if not provided
+                    if "sort_by" not in search_params:
+                        search_params["sort_by"] = "closing_time"
+                    
+                    print(f"Calling search_poi with params: {search_params}")
+                    # Call the search function
+                    search_result = await search_poi_for_ai(
+                        search_tag=json.loads(search_params["search_tag"].replace("'", "\"")),
+                        lat=lat,
+                        lon=lon,
+                        radius_km=radius_km,
+                        rating=rating,
+                        sort_by=search_params.get("sort_by", "closing_time")
+                    )
+
+                    print(f"Search result: {search_result}")
+                    
+                    function_results.append({
+                        "function_name": "search_poi",
+                        "parameters": search_params,
+                        "result": search_result
+                    })
+                
+                # Send the function results back to OpenAI for final plan generation
+                messages.append({"role": "assistant", "content": json.dumps(response)})
+                messages.append({
+                    "role": "user", 
+                    "content": f"Function call results: {json.dumps(function_results, indent=2)}\n\nNow generate the final travel plan in markdown format."
+                })
+                
+                # Get the final response
+                final_response = generate_llm_response(
+                    messages=messages,
+                    model_name="gpt-4-turbo",
+                    temperature=0.7,
+                    function_schema=function_schema,
+                )
+                
+                print(f"Final response from OpenAI: {final_response}")
+                travel_plan = final_response
+                
+            else:
+                # If no function calls, the AI provided a direct response
+                travel_plan = response_data.get("travel_plan", "Plan generation failed")
+            
+            return {
+                "user_id": user_id,
+                "city_id": city_id,
+                "user_activity": user_activity,
+                "travel_plan": travel_plan,
+                "location": {"latitude": lat, "longitude": lon},
+                "parameters": {
+                    "radius_km": radius_km,
+                    "rating": rating,
+                    "intent": intent
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating travel plan: {e}")
+            raise HTTPException(status_code=500, detail=f"Error generating travel plan: {str(e)}")
+        
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Unexpected error in get_plan: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
