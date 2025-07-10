@@ -19,6 +19,7 @@ from app.database import get_session
 from app.models import Category, UserFrequency
 import json
 from app.utils import generate_llm_response
+import time as time_module
 
 load_dotenv()
 
@@ -704,18 +705,21 @@ async def get_plan(
             {"role": "user", "content": user_message}
         ]
 
+        llm_start = time_module.perf_counter()
         response = generate_llm_response(
                     messages=messages,
                     model_name=model,
                     temperature=0.7,
                 )
+        llm_time = (time_module.perf_counter() - llm_start) * 1000
         
         print("Generated travel plan response:", response)
         
         return {
             "plan": response,
             "user_activity": user_activity,
-            "pois": pois
+            "pois": pois,
+            "llm_time_ms": llm_time
         }
 
     except HTTPException:
