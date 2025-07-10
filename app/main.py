@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, Query
-from datetime import datetime
-from typing import List, Dict, Any, Optional
+from collections import defaultdict
+from fastapi import Depends, FastAPI, HTTPException, Query
+from datetime import datetime, time
+from typing import List, Dict, Any, Optional, Union
 import click
 import osmnx as ox
 import geopandas as gpd
@@ -13,6 +14,9 @@ import aiohttp
 import asyncio
 from urllib.parse import quote
 from dotenv import load_dotenv
+from sqlmodel import Session, asc, desc, select
+from app.database import get_session
+from app.models import Category, UserFrequency
 
 load_dotenv()
 
@@ -33,109 +37,129 @@ YELP_API_BASE = "https://api.yelp.com/v3"
 if not YELP_API_KEY:
     logger.warning("YELP_API_KEY environment variable not set. Yelp integration will be disabled.")
 
-# POI category mapping for OSM tags
-POI_CATEGORIES = {
-    # Food categories
-    "food": {"amenity": "restaurant"},
-    "japanese restaurant": {"amenity": "restaurant", "cuisine": "japanese"},
-    "western restaurant": {"amenity": "restaurant", "cuisine": ["american", "european", "french", "italian"]},
-    "eat all you can restaurant": {"amenity": "restaurant", "diet": "buffet"},
-    "chinese restaurant": {"amenity": "restaurant", "cuisine": "chinese"},
-    "indian restaurant": {"amenity": "restaurant", "cuisine": "indian"},
-    "ramen restaurant": {"amenity": "restaurant", "cuisine": "ramen"},
-    "curry restaurant": {"amenity": "restaurant", "cuisine": "curry"},
-    "bbq restaurant": {"amenity": "restaurant", "cuisine": "barbecue"},
-    "hot pot restaurant": {"amenity": "restaurant", "cuisine": "hot_pot"},
-    "bar": {"amenity": "bar"},
-    "diner": {"amenity": "restaurant", "restaurant": "diner"},
-    "creative cuisine": {"amenity": "restaurant", "cuisine": "fusion"},
-    "organic cuisine": {"amenity": "restaurant", "organic": "yes"},
-    "pizza": {"amenity": "restaurant", "cuisine": "pizza"},
-    "café": {"amenity": "cafe"},
-    "tea salon": {"amenity": "cafe", "cuisine": "tea"},
-    "bakery": {"shop": "bakery"},
-    "sweets": {"shop": "confectionery"},
-    "wine bar": {"amenity": "bar", "bar": "wine_bar"},
-    "pub": {"amenity": "pub"},
-    "disco": {"amenity": "nightclub"},
-    "beer garden": {"amenity": "biergarten"},
-    "fast food": {"amenity": "fast_food"},
-    "karaoke": {"amenity": "karaoke_box"},
-    "cruising": {"tourism": "attraction", "attraction": "cruise"},
-    "theme park restaurant": {"amenity": "restaurant", "tourism": "theme_park"},
-    "amusement restaurant": {"amenity": "restaurant", "leisure": "amusement_arcade"},
-    "other restaurants": {"amenity": "restaurant"},
+def parse_yelp_hours(hours_data: List[Dict]) -> Dict[str, Any]:
+    """
+    Parse Yelp hours data to extract today's closing time and formatted hours
+    
+    Args:
+        hours_data: List of hours data from Yelp API
+    
+    Returns:
+        Dict with closing_time_today (as time object), formatted_hours, and is_open_now
+    """
+    if not hours_data:
+        return {
+            "closing_time_today": None,
+            "formatted_hours": "Hours not available",
+            "is_open_now": None
+        }
+    
+    # Get today's day of week (0=Monday, 6=Sunday)
+    today = datetime.now().weekday()
+    
+    # Yelp uses 0=Monday, 6=Sunday format
+    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    
+    formatted_hours = {}
+    closing_time_today = None
+    is_open_now = None
+    
+    for hour_info in hours_data:
+        if hour_info.get("hours_type") == "REGULAR":
+            open_times = hour_info.get("open", [])
+            is_open_now = hour_info.get("is_open_now", False)
+            
+            # Process each day's hours
+            for day_hours in open_times:
+                day = day_hours.get("day", -1)
+                start = day_hours.get("start", "")
+                end = day_hours.get("end", "")
+                
+                if 0 <= day <= 6:
+                    day_name = day_names[day]
+                    
+                    # Format times (Yelp uses 24-hour format like "1000" for 10:00)
+                    if start and end:
+                        try:
+                            start_time = f"{start[:2]}:{start[2:]}" if len(start) == 4 else start
+                            end_time = f"{end[:2]}:{end[2:]}" if len(end) == 4 else end
+                            formatted_hours[day_name] = f"{start_time} - {end_time}"
+                            
+                            # If this is today, extract closing time
+                            if day == today:
+                                # Convert end time to time object
+                                if len(end) == 4:
+                                    hour = int(end[:2])
+                                    minute = int(end[2:])
+                                    # Handle 24:00 format (midnight)
+                                    if hour == 24:
+                                        hour = 0
+                                    elif hour > 23:
+                                        hour = hour - 24
+                                    closing_time_today = time(hour, minute)
+                        except (ValueError, IndexError) as e:
+                            logger.warning(f"Error parsing Yelp hours: {e}")
+                            formatted_hours[day_name] = "Hours format error"
+                    else:
+                        formatted_hours[day_name] = "Closed"
+            
+            break  # Only process the first regular hours entry
+    
+    # Format hours for display
+    hours_display = []
+    for day in day_names:
+        if day in formatted_hours:
+            hours_display.append(f"{day}: {formatted_hours[day]}")
+    
+    return {
+        "closing_time_today": closing_time_today,
+        "formatted_hours": " | ".join(hours_display) if hours_display else "Hours not available",
+        "is_open_now": is_open_now
+    }
 
-    # Shopping categories
-    "shopping": {"shop": True},
-    "glasses": {"shop": "optician"},
-    "drug store": {"shop": "chemist"},
-    "electronics store": {"shop": "electronics"},
-    "diy store": {"shop": "doityourself"},
-    "convenience store": {"shop": "convenience"},
-    "recycle shop": {"shop": "second_hand"},
-    "interior shop": {"shop": "interior_decoration"},
-    "sports store": {"shop": "sports"},
-    "clothes store": {"shop": "clothes"},
-    "grocery store": {"shop": "supermarket"},
-    "online grocery store": {"shop": "supermarket", "service": "online"},
-    "retail store": {"shop": True},
-
-    # Entertainment categories
-    "entertainment": {"leisure": True},
-    "sports recreation": {"leisure": "sports_centre"},
-    "game arcade": {"leisure": "amusement_arcade"},
-    "swimming pool": {"leisure": "swimming_pool"},
-    "casino": {"amenity": "casino"},
-
-    # Accommodation & Transport
-    "hotel": {"tourism": "hotel"},
-    "park": {"leisure": "park"},
-    "transit station": {"public_transport": "station"},
-    "parking area": {"amenity": "parking"},
-
-    # Healthcare
-    "hospital": {"amenity": "hospital"},
-    "pharmacy": {"amenity": "pharmacy"},
-    "chiropractic": {"healthcare": "chiropractic"},
-    "elderly care home": {"amenity": "social_facility", "social_facility": "nursing_home"},
-    "vet": {"amenity": "veterinary"},
-
-    # Education
-    "school": {"amenity": "school"},
-    "cram school": {"amenity": "school", "school:type": "cramming"},
-    "kindergarten": {"amenity": "kindergarten"},
-    "driving school": {"amenity": "driving_school"},
-
-    # Services
-    "real estate": {"office": "estate_agent"},
-    "home appliances": {"shop": "houseware"},
-    "post office": {"amenity": "post_office"},
-    "laundry": {"shop": "laundry"},
-    "wedding ceremony": {"amenity": "place_of_worship"},
-    "cemetary": {"landuse": "cemetery"},
-    "bank": {"amenity": "bank"},
-    "hot spring": {"leisure": "resort", "resort": "hot_spring"},
-    "hair salon": {"shop": "hairdresser"},
-    "lawyer office": {"office": "lawyer"},
-    "recruitment office": {"office": "employment_agency"},
-    "city hall": {"amenity": "townhall"},
-    "community center": {"amenity": "community_centre"},
-    "church": {"amenity": "place_of_worship", "religion": "christian"},
-    "accountant office": {"office": "accountant"},
-    "it office": {"office": "it"},
-    "publisher office": {"office": "publisher"},
-
-    # Industry & Specialized
-    "building material": {"shop": "trade"},
-    "gardening": {"shop": "garden_centre"},
-    "heavy industry": {"landuse": "industrial"},
-    "npo": {"office": "ngo"},
-    "utility copany": {"office": "company", "operator:type": "public"},
-    "port": {"landuse": "port"},
-    "research facility": {"amenity": "research_institute"},
-    "fishing": {"leisure": "fishing"},
-}
+async def get_yelp_business_details(session: aiohttp.ClientSession, business_id: str) -> Dict[str, Any]:
+    """
+    Get detailed business information from Yelp including hours
+    
+    Args:
+        session: aiohttp session
+        business_id: Yelp business ID
+    
+    Returns:
+        Dict with detailed business info including hours
+    """
+    if not YELP_API_KEY or not business_id:
+        return {}
+    
+    try:
+        headers = {
+            "Authorization": f"Bearer {YELP_API_KEY}",
+            "Accept": "application/json"
+        }
+        
+        async with session.get(f"{YELP_API_BASE}/businesses/{business_id}", headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                
+                # Parse hours information
+                hours_data = data.get("hours", [])
+                hours_info = parse_yelp_hours(hours_data)
+                
+                return {
+                    "yelp_hours": hours_info["formatted_hours"],
+                    "yelp_closing_time_today": hours_info["closing_time_today"],
+                    "yelp_is_open_now": hours_info["is_open_now"],
+                    "yelp_transactions": data.get("transactions", []),
+                    "yelp_location": data.get("location", {}),
+                    "yelp_coordinates": data.get("coordinates", {})
+                }
+            else:
+                logger.warning(f"Yelp API error for business {business_id}: {response.status}, {response.text}")
+                
+    except Exception as e:
+        logger.error(f"Error getting Yelp business details for {business_id}: {e}")
+    
+    return {}
 
 async def search_yelp_business(session: aiohttp.ClientSession, name: str, latitude: float, longitude: float, category: str = "") -> Dict[str, Any]:
     """
@@ -228,19 +252,36 @@ async def search_yelp_business(session: aiohttp.ClientSession, name: str, latitu
                         best_match = business
                 
                 if best_match:
-                    return {
+                    basic_info = {
                         "yelp_id": best_match.get("id", ""),
                         "yelp_name": best_match.get("name", ""),
                         "yelp_rating": best_match.get("rating", 0),
-                        "yelp_review_count": best_match.get("review_count", 0),
-                        "yelp_price": best_match.get("price", ""),
-                        "yelp_url": best_match.get("url", ""),
-                        "yelp_image_url": best_match.get("image_url", ""),
+                        # "yelp_review_count": best_match.get("review_count", 0),
+                        # "yelp_price": best_match.get("price", ""),
+                        # "yelp_url": best_match.get("url", ""),
+                        # "yelp_image_url": best_match.get("image_url", ""),
                         "yelp_categories": [cat.get("title", "") for cat in best_match.get("categories", [])],
-                        "yelp_phone": best_match.get("display_phone", ""),
+                        # "yelp_phone": best_match.get("display_phone", ""),
                         "yelp_is_closed": best_match.get("is_closed", False),
-                        "match_score": round(best_score, 2)
+                        # "match_score": round(best_score, 2)
                     }
+                    
+                    # Get detailed info including hours
+                    business_id = best_match.get("id", "")
+                    if business_id:
+                        detailed_info = await get_yelp_business_details(session, business_id)
+                        basic_info.update(detailed_info)
+                    
+                    # Add default values for missing hour info
+                    if "yelp_hours" not in basic_info:
+                        basic_info.update({
+                            "yelp_hours": "Hours not available",
+                            "yelp_closing_time_today": None,
+                            "yelp_is_open_now": None
+                        })
+                    
+                    return basic_info
+                    
             else:
                 logger.warning(f"Yelp API error for {name}: {response.status}")
                 
@@ -266,7 +307,7 @@ async def enrich_pois_with_yelp(poi_list: List[Dict[str, Any]]) -> List[Dict[str
     
     async with aiohttp.ClientSession() as session:
         # Process POIs in batches to respect rate limits
-        batch_size = 5
+        batch_size = 2  # Reduced batch size due to additional API calls
         for i in range(0, len(poi_list), batch_size):
             batch = poi_list[i:i + batch_size]
             tasks = []
@@ -295,25 +336,37 @@ async def enrich_pois_with_yelp(poi_list: List[Dict[str, Any]]) -> List[Dict[str
                     review_count = yelp_data.get("yelp_review_count", 0)
                     # Weighted score: rating * log(review_count + 1) to balance rating and popularity
                     enhanced_poi["sort_score"] = rating * math.log(review_count + 1)
+                    
+                    # Add closing time sort value (minutes from midnight)
+                    closing_time = yelp_data.get("yelp_closing_time_today")
+                    if closing_time:
+                        enhanced_poi["closing_time_minutes"] = closing_time.hour * 60 + closing_time.minute
+                    else:
+                        enhanced_poi["closing_time_minutes"] = 9999  # Places without hours go to end
+                        
                 else:
                     # Default values for POIs without Yelp data
                     enhanced_poi.update({
                         "yelp_rating": 0,
-                        "yelp_review_count": 0,
-                        "yelp_price": "",
-                        "yelp_url": "",
-                        "yelp_image_url": "",
-                        "yelp_categories": [],
-                        "yelp_phone": "",
+                        # "yelp_review_count": 0,
+                        # "yelp_price": "", 
+                        # "yelp_url": "",
+                        # "yelp_image_url": "",
+                        # "yelp_categories": [],
+                        # "yelp_phone": "",
                         "yelp_is_closed": False,
-                        "sort_score": 0
+                        "yelp_hours": "Hours not available",
+                        "yelp_closing_time_today": None,
+                        "yelp_is_open_now": None,
+                        # "sort_score": 0,
+                        # "closing_time_minutes": 9999
                     })
                 
                 enriched_pois.append(enhanced_poi)
             
             # Small delay between batches to respect rate limits
             if i + batch_size < len(poi_list):
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.2)  # Increased delay due to additional API calls
     
     return enriched_pois
 
@@ -321,57 +374,57 @@ async def enrich_pois_with_yelp(poi_list: List[Dict[str, Any]]) -> List[Dict[str
 async def root():
     return "Hello World! This is a travel planner with Yelp integration"
 
-@app.get("/poi/categories")
-async def get_poi_categories():
-    """Get list of available POI categories"""
-    return {
-        "categories": list(POI_CATEGORIES.keys()),
-        "total": len(POI_CATEGORIES),
-        "yelp_integration": YELP_API_KEY is not None
-    }
+# @app.get("/poi/categories")
+# async def get_poi_categories():
+#     """Get list of available POI categories"""
+#     return {
+#         "categories": list(POI_CATEGORIES.keys()),
+#         "total": len(POI_CATEGORIES),
+#         "yelp_integration": YELP_API_KEY is not None
+#     }
 
 @app.get("/poi/search")
 async def search_poi(
     lat: float = Query(..., description="Latitude", ge=-90, le=90),
     lon: float = Query(..., description="Longitude", ge=-180, le=180),
-    category: str = Query(..., description="POI category (e.g., 'restaurant', 'park')"),
+    search_tag: dict[str, bool | str | list[str]] = Query(..., description="Search tags for osmnx search"),
     radius_km: float = Query(10, description="Search radius in kilometers", gt=0, le=50),
-    sort_by: str = Query("rating", description="Sort by: 'rating', 'distance', 'review_count'")
+    sort_by: str = Query("closing_time", description="Sort by: 'closing_time', 'rating', 'distance', 'review_count'")
 ):
     """
-    Search for Points of Interest (POI) within a specified radius with Yelp ratings
+    Search for Points of Interest (POI) within a specified radius with Yelp ratings and hours
     
     Args:
         lat: Latitude of the search center
         lon: Longitude of the search center
-        category: POI category to search for
+        search_tag: Search tags for osmnx search
         radius_km: Search radius in kilometers (max 50km)
-        sort_by: Sort results by 'rating', 'distance', or 'review_count'
+        sort_by: Sort results by 'closing_time', 'rating', 'distance', or 'review_count'
     
     Returns:
-        List of POIs with their details and Yelp ratings
+        List of POIs with their details, Yelp ratings, and hours information
     """
     try:
         # Validate category
-        category_lower = category.lower().strip()
-        if category_lower not in POI_CATEGORIES:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Category '{category}' not supported. Use /poi/categories to see available categories."
-            )
+        # category_lower = category.lower().strip()
+        # if category_lower not in POI_CATEGORIES:
+        #     raise HTTPException(
+        #         status_code=400, 
+        #         detail=f"Category '{category}' not supported. Use /poi/categories to see available categories."
+        #     )
         
         # Validate sort_by parameter
-        valid_sort_options = ["rating", "distance", "review_count"]
+        valid_sort_options = ["closing_time", "rating", "distance", "review_count"]
         if sort_by not in valid_sort_options:
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid sort_by parameter. Must be one of: {valid_sort_options}"
             )
         
-        logger.info(f"Searching for {category_lower} near ({lat}, {lon}) within {radius_km}km")
+        # logger.info(f"Searching for {category_lower} near ({lat}, {lon}) within {radius_km}km")
         
         # Get OSM tags for the category
-        tags = POI_CATEGORIES[category_lower]
+        tags = search_tag
         print(f"Using tags: {tags}")
         
         # Use point-based query which is more efficient and respects the radius better
@@ -386,14 +439,14 @@ async def search_poi(
             return {
                 "pois": [],
                 "count": 0,
-                "message": f"No {category_lower} found within {radius_km}km of the specified location"
+                "message": f"No POI found within {radius_km}km of the specified location"
             }
         
         if pois.empty:
             return {
                 "pois": [],
                 "count": 0,
-                "message": f"No {category_lower} found within {radius_km}km"
+                "message": f"No POI found within {radius_km}km"
             }
         
         # Process POIs and filter by distance
@@ -463,57 +516,14 @@ async def search_poi(
                         "latitude": round(float(lat_coord), 6),
                         "longitude": round(float(lon_coord), 6),
                         "distance_km": round(float(distance), 2),
-                        "category": category_lower,
-                        "address": str(address),
-                        "phone": str(phone),
-                        "website": str(website),
+                        # "category": category_lower,
+                        # "address": str(address),
+                        # "phone": str(phone),
+                        # "website": str(website),
                         "opening_hours": str(opening_hours),
-                        "osm_id": str(idx) if idx is not None else "unknown"
+                        # "osm_id": str(idx) if idx is not None else "unknown"
                     }
                     
-                    # Add category-specific fields with validation
-                    if "restaurant" in category_lower or category_lower in ["food"]:
-                        cuisine = poi.get("cuisine", "")
-                        if isinstance(cuisine, float) and math.isnan(cuisine):
-                            cuisine = ""
-                        poi_data["cuisine"] = str(cuisine)
-                        
-                        diet = poi.get("diet", "")
-                        if isinstance(diet, float) and math.isnan(diet):
-                            diet = ""
-                        poi_data["diet"] = str(diet)
-                        
-                    elif category_lower == "hotel":
-                        stars = poi.get("stars", "")
-                        if isinstance(stars, float) and math.isnan(stars):
-                            stars = ""
-                        poi_data["stars"] = str(stars)
-                        
-                    elif category_lower == "church":
-                        religion = poi.get("religion", "")
-                        if isinstance(religion, float) and math.isnan(religion):
-                            religion = ""
-                        poi_data["religion"] = str(religion)
-                        
-                    elif "store" in category_lower or "shop" in category_lower or category_lower == "shopping":
-                        shop_type = poi.get("shop", "")
-                        if isinstance(shop_type, float) and math.isnan(shop_type):
-                            shop_type = ""
-                        poi_data["shop_type"] = str(shop_type)
-                        
-                    elif category_lower in ["hospital", "pharmacy", "chiropractic", "elderly care home"]:
-                        healthcare = poi.get("healthcare", "")
-                        if isinstance(healthcare, float) and math.isnan(healthcare):
-                            healthcare = ""
-                        poi_data["healthcare_type"] = str(healthcare)
-                        
-                    elif "office" in category_lower:
-                        office_type = poi.get("office", "")
-                        if isinstance(office_type, float) and math.isnan(office_type):
-                            office_type = ""
-                        poi_data["office_type"] = str(office_type)
-                    
-                    poi_list.append(poi_data)
                     
             except Exception as e:
                 logger.warning(f"Error processing POI {idx}: {e}")
@@ -523,7 +533,10 @@ async def search_poi(
         enriched_poi_list = await enrich_pois_with_yelp(poi_list)
         
         # Sort based on the requested criteria
-        if sort_by == "rating":
+        if sort_by == "closing_time":
+            # Sort by closing time (earliest closing first), then by rating, then by distance
+            enriched_poi_list.sort(key=lambda x: (x.get("closing_time_minutes", 9999), -x.get("yelp_rating", 0), x["distance_km"]))
+        elif sort_by == "rating":
             # Sort by sort_score (weighted rating), then by rating, then by distance
             enriched_poi_list.sort(key=lambda x: (-x.get("sort_score", 0), -x.get("yelp_rating", 0), x["distance_km"]))
         elif sort_by == "review_count":
@@ -536,15 +549,15 @@ async def search_poi(
         return {
             "pois": enriched_poi_list,
             "count": len(enriched_poi_list),
-            "search_params": {
-                "latitude": lat,
-                "longitude": lon,
-                "category": category_lower,
-                "radius_km": radius_km,
-                "sort_by": sort_by
-            },
-            "yelp_integration_enabled": YELP_API_KEY is not None,
-            "total_with_yelp_data": sum(1 for poi in enriched_poi_list if poi.get("yelp_rating", 0) > 0)
+            # "search_params": {
+            #     "latitude": lat,
+            #     "longitude": lon,
+            #     "category": category_lower,
+            #     "radius_km": radius_km,
+            #     "sort_by": sort_by
+            # },
+            # "yelp_integration_enabled": YELP_API_KEY is not None,
+            # "total_with_yelp_data": sum(1 for poi in enriched_poi_list if poi.get("yelp_rating", 0) > 0)
         }
         
     except HTTPException:
@@ -552,6 +565,59 @@ async def search_poi(
     except Exception as e:
         logger.error(f"Unexpected error in POI search: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@app.get("/plan")
+async def get_plan(
+    user_id: int = Query(1, description="User ID"),
+    city_id: int = Query(1, description="City ID"),
+    lat: float = Query(..., description="Latitude", ge=-90, le=90),
+    lon: float = Query(..., description="Longitude", ge=-180, le=180),
+    radius_km: float = Query(10, description="Search radius in kilometers", gt=0, le=50),
+    rating: float = Query(4, description="Minimum Yelp rating", ge=0, le=5),
+    intent: str = Query("travel", description="Intent of the plan"),
+    session: Session = Depends(get_session)
+):
+    try:
+        # Build the query with join
+        query = (
+            select(
+                UserFrequency.time_slot,
+                Category.category_name,
+                UserFrequency.count
+            )
+            .join(Category)
+            .where(UserFrequency.poi_category_id == Category.category_id)
+            .where(UserFrequency.user_id == user_id)
+        )
+        
+        # Add city filter if provided
+        if city_id is not None:
+            query = query.where(UserFrequency.city_id == city_id)
+        
+        # Order by count descending for easier processing
+        query = query.order_by(asc(UserFrequency.time_slot), desc(UserFrequency.count))
+        
+        # Execute query
+        results = session.exec(query).all()
+        
+        if not results:
+            raise HTTPException(status_code=404, detail=f"No activity found for user {user_id}")
+        
+        # Group results by time_slot and get top 3 for each
+        time_slot_categories = defaultdict(list)
+        
+        for time_slot, category_name, count in results:
+            if len(time_slot_categories[time_slot]) < 3:
+                time_slot_categories[time_slot].append(category_name)
+        
+        # Convert defaultdict to regular dict and ensure consistent ordering
+        result = dict(sorted(time_slot_categories.items()))
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 if __name__ == "__main__":

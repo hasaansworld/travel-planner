@@ -2,7 +2,7 @@ from sqlmodel import SQLModel, create_engine, Session
 from typing import Generator
 
 # Database configuration
-DATABASE_URL = 'mysql+pymysql://user:password@localhost:3306/travel_planner'
+DATABASE_URL = 'mysql+pymysql://user:password@db:3306/travel_planner'
 
 # Create engine
 engine = create_engine(
