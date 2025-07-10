@@ -7,11 +7,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def generate_llm_response(messages, model_name, function_schema, **kwargs):
+def generate_llm_response(messages, model_name, **kwargs):
     # Set default parameters
     max_tokens = kwargs.get('max_tokens', 1000)
     temperature = kwargs.get('temperature', 0.7)
     top_p = kwargs.get('top_p', 1.0)
+    
+    if model_name == "deepseek":
+        model_name = "deepseek-r1-distill-llama-70b"
+    elif model_name == "llama":
+        model_name = "meta-llama/llama-4-maverick-17b-128e-instruct"
     
     try:
         # Route to OpenAI if model contains 'gpt'
@@ -35,8 +40,6 @@ def generate_llm_response(messages, model_name, function_schema, **kwargs):
             messages=messages,
             temperature=temperature,
             top_p=top_p,
-            functions=[function_schema],
-            function_call="auto"
         )
         
         message = response.choices[0].message
