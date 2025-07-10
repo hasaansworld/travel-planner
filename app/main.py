@@ -530,24 +530,24 @@ async def root():
 async def search_poi(
     lat: float = Query(..., description="Latitude", ge=-90, le=90),
     lon: float = Query(..., description="Longitude", ge=-180, le=180),
-    search_tag: str = Query(..., description="Search tags for osmnx search"),
     radius_km: float = Query(10, description="Search radius in kilometers", gt=0, le=50),
     sort_by: str = Query("closing_time", description="Sort by: 'closing_time', 'rating', 'distance', 'review_count'")
 ):
     """
     Search for Points of Interest (POI) within a specified radius with Yelp ratings and hours
     """
-    return await search_poi_for_ai(search_tag, lat, lon, radius_km, 0, sort_by)
+    return await search_poi_for_ai({'amenity': True}, lat, lon, radius_km, 0, sort_by)
 
 @app.get("/plan")
 async def get_plan(
     user_id: int = Query(1, description="User ID"),
     city_id: int = Query(1, description="City ID"),
-    lat: float = Query(65.0121, description="Latitude", ge=-90, le=90),
-    lon: float = Query(25.4651, description="Longitude", ge=-180, le=180),
+    lat: float = Query(48.8575, description="Latitude", ge=-90, le=90),
+    lon: float = Query(2.3514, description="Longitude", ge=-180, le=180),
     radius_km: float = Query(2, description="Search radius in kilometers", gt=0, le=50),
-    rating: float = Query(4, description="Minimum Yelp rating", ge=0, le=5),
-    intent: str = Query("travel", description="Intent of the plan"),
+    rating: float = Query(3, description="Minimum Yelp rating", ge=0, le=5),
+    intent: str = Query("travel, sight seeing and trying local food", description="Intent of the plan"),
+    model: str = Query("llama", description="LLM model to use for generating the plan"),
     session: Session = Depends(get_session)
 ):
     try:
@@ -706,7 +706,7 @@ async def get_plan(
 
         response = generate_llm_response(
                     messages=messages,
-                    model_name="gpt-4-turbo",
+                    model_name=model,
                     temperature=0.7,
                 )
         
@@ -718,200 +718,6 @@ async def get_plan(
             "pois": pois
         }
 
-        # Define the function schema for OpenAI
-        # function_schema = {
-        #     "name": "search_poi",
-        #     "description": "Search for Points of Interest using OSM tags. Use this to find specific types of places like restaurants, shops, attractions, etc.",
-        #     "parameters": {
-        #         "type": "object",
-        #         "properties": {
-        #             "search_tag": {
-        #                 "type": "string",
-        #                 "description": "Pass json object as string. OSM tags to search for. Examples: {'amenity': 'restaurant'}, {'shop': 'supermarket'}, {'tourism': 'attraction'}, {'leisure': 'park'}, {'amenity': ['cafe', 'bar']}"
-        #             },
-        #             "sort_by": {
-        #                 "type": "string",
-        #                 "enum": ["closing_time", "rating", "distance"],
-        #                 "description": "How to sort the results. Use 'closing_time' to prioritize places that close soon."
-        #             }
-        #         },
-        #         "required": ["search_tag"]
-        #     }
-        # }
-        
-        # # Prepare the system message
-        # system_message = """You are a comprehensive travel planner AI that creates diverse, full-day itineraries. You will receive a user's mobility history showing their preferred activity categories throughout the day.
-
-        #     ## Core Requirements:
-
-        #     ### 1. Activity Pattern Analysis
-        #     - Analyze the user's activity patterns across the day
-        #     - Identify peak activity times, preferred categories, and natural flow patterns
-        #     - Consider the user's stated intent alongside their historical preferences
-
-        #     ### 2. Diverse POI Search Strategy
-        #     **RECOMMENDED**: Unless the user specifies otherwise, search for AT LEAST 6 different POI categories using multiple search_poi calls:
-        #     - **Food & Dining**: restaurants, cafes, bars, food trucks, bakeries
-        #     - **Entertainment**: cinemas, theaters, music venues, gaming centers
-        #     - **Shopping**: malls, markets, boutiques, specialty stores
-        #     - **Culture & Tourism**: museums, galleries, historical sites, landmarks
-        #     - **Recreation**: parks, sports facilities, beaches, outdoor activities
-        #     - **Services**: spas, fitness centers, libraries, co-working spaces
-
-        #     **Search Strategy**:
-        #     - Make one search_poi call with multiple tags to find diverse places
-        #     - Use varied OSM format tags for each category:
-        #     - Food: {'amenity': 'restaurant'}, {'amenity': 'cafe'}, {'amenity': 'bar'}
-        #     - Shopping: {'shop': 'mall'}, {'shop': 'supermarket'}, {'shop': 'clothes'}
-        #     - Culture: {'tourism': 'attraction'}, {'tourism': 'museum'}, {'amenity': 'library'}
-        #     - Recreation: {'leisure': 'park'}, {'leisure': 'sports_centre'}, {'natural': 'beach'}
-        #     - Entertainment: {'amenity': 'cinema'}, {'amenity': 'theatre'}
-        #     - Services: {'leisure': 'spa'}, {'amenity': 'gym'}
-
-        #     ### 3. Comprehensive Plan Requirements
-        #     - **Minimum 12-15 places** (unless user specifies fewer)
-        #     - **Balanced distribution**: When searching multiple categories, no single category should dominate (max 30% of total places)
-        #     - **Respect user intent**: If user specifies particular focus areas, prioritize those while still providing some variety
-        #     - **Time-appropriate activities**: Match activities to typical operating hours and user patterns
-        #     - **Logical flow**: Consider travel time and geographic proximity
-        #     - **Complete day coverage**: Include breakfast, lunch, dinner, and activities throughout the day
-
-        #     ### 4. Enhanced Recommendation Logic
-        #     - **Priority factors** (in order):
-        #     1. User's stated intent and goals
-        #     2. Historical activity patterns from mobility data
-        #     3. Time-appropriate venue hours
-        #     4. Geographic proximity and travel efficiency
-        #     5. Venue popularity and ratings
-
-        #     ### 5. Markdown Format (STRICT)
-        #     For each place, use exactly this format:
-
-        #     ## [Place Name]
-        #     **Time:** [Recommended visit time]
-        #     **Distance:** [Distance from previous location]
-        #     **Yelp Rating:** [Rating/5 stars]
-        #     **Reason:** [Why this place matches user preferences and fits the itinerary]
-
-        #     ### 6. Quality Assurance Checklist
-        #     Before finalizing, ensure:
-        #     - [ ] Multiple POI categories represented (aim for 6+ unless user specifies otherwise)
-        #     - [ ] 12-15 total places recommended (adjust based on user needs)
-        #     - [ ] When using multiple categories, no category exceeds 30% of total recommendations
-        #     - [ ] User's specific requests are prioritized
-        #     - [ ] Logical time progression throughout the day
-        #     - [ ] Includes meals (breakfast, lunch, dinner)
-        #     - [ ] Activities match user's historical patterns
-        #     - [ ] All places have proper formatting
-
-        #     ## Example Search Sequence:
-        #     1. search_poi({'amenity': 'restaurant'}) 
-        #     2. search_poi({'tourism': 'attraction', 'amenity': 'restaurant',})
-        #     3. search_poi({'amenity': 'cafe', 'shop': 'mall'})
-        #     4. search_poi({'shop': 'mall', 'tourism': 'attraction'})
-        #     5. search_poi({'amenity': 'restaurant', 'tourism': 'hotel'})
-        #     6. search_poi({'leisure': 'sports_centre', 'shop': 'sports'})
-        #     7. search_poi({'amenity': 'cafe', 'shop': 'books', 'leisure': 'library'})
-
-        #     Remember: Diversity is encouraged to create rich, varied experiences, but always prioritize the user's stated preferences and intent. When no specific focus is given, aim for variety that goes beyond the user's top preferences to introduce them to new experiences while respecting their core interests."""
-
-        # # Prepare the user message
-        # user_message = f"""User Activity History:
-        #     {json.dumps(user_activity, indent=2)}
-
-        #     Location: Latitude {lat}, Longitude {lon}
-        #     Search radius: {radius_km} km
-        #     Minimum rating: {rating}
-        #     Intent: {intent}
-
-        #     Please create a personalized travel plan for this user based on their activity history and travel intent. Use the search_poi function to find relevant places."""
-
-        # # Create the messages for OpenAI
-        # messages = [
-        #     {"role": "system", "content": system_message},
-        #     {"role": "user", "content": user_message}
-        # ]
-        
-        # print(f"Messages for OpenAI: {json.dumps(messages, indent=2)}")
-
-        # # Make the initial call to OpenAI
-        # try:
-        #     response = generate_llm_response(
-        #         messages=messages,
-        #         model_name="gpt-4.1",
-        #         temperature=0.7,
-        #         function_schema=function_schema,
-        #     )
-
-        #     print(f"Raw response from OpenAI: {response}")
-            
-        #     # Check if the AI wants to make function calls
-        #     if "function_call" in response:
-        #         # Handle function calls
-        #         function_results = []
-                
-        #         func_call = response["function_call"]
-        #         print(f"Function call detected: {func_call}")
-        #         if func_call["name"] == "search_poi":
-        #             search_params = func_call["arguments"]
-                    
-        #             # Add default sort_by if not provided
-        #             if "sort_by" not in search_params:
-        #                 search_params["sort_by"] = "closing_time"
-                    
-        #             print(f"Calling search_poi with params: {search_params}")
-        #             params_json = json.loads(search_params["search_tag"].replace("'", "\""))
-        #             print(f"Parsed search_tag: {params_json}")
-        #             # Call the search function
-        #             search_result = 
-
-        #             print(f"Search result: {search_result}")
-                    
-        #             function_results.append({
-        #                 "function_name": "search_poi",
-        #                 "parameters": search_params,
-        #                 "result": search_result
-        #             })
-                
-        #         # Send the function results back to OpenAI for final plan generation
-        #         messages.append({"role": "assistant", "content": json.dumps(response)})
-        #         messages.append({
-        #             "role": "user", 
-        #             "content": f"Function call results: {json.dumps(function_results, indent=2)}\n\nNow generate the final travel plan in markdown format."
-        #         })
-                
-        #         # Get the final response
-        #         final_response = generate_llm_response(
-        #             messages=messages,
-        #             model_name="gpt-4-turbo",
-        #             temperature=0.7,
-        #             function_schema=function_schema,
-        #         )
-                
-        #         print(f"Final response from OpenAI: {final_response}")
-        #         travel_plan = final_response
-                
-        #     else:
-        #         # If no function calls, the AI provided a direct response
-        #         travel_plan = response_data.get("travel_plan", "Plan generation failed")
-            
-        #     return {
-        #         "user_id": user_id,
-        #         "city_id": city_id,
-        #         "user_activity": user_activity,
-        #         "travel_plan": travel_plan,
-        #         "location": {"latitude": lat, "longitude": lon},
-        #         "parameters": {
-        #             "radius_km": radius_km,
-        #             "rating": rating,
-        #             "intent": intent
-        #         }
-        #     }
-            
-        # except Exception as e:
-        #     logger.error(f"Error generating travel plan: {e}")
-        #     raise HTTPException(status_code=500, detail=f"Error generating travel plan: {str(e)}")
-        
     except HTTPException:
         raise
     except Exception as e:
