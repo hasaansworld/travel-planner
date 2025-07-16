@@ -1,5 +1,5 @@
-from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional, List
+from sqlmodel import JSON, Column, SQLModel, Field, Relationship
+from typing import Any, Dict, Optional, List
 from datetime import datetime
 
 class User(SQLModel, table=True):
@@ -81,3 +81,43 @@ class POICountRead(SQLModel):
     poi_category_id: int
     poi_count: int
     city_id: int
+
+class TravelPlan(SQLModel, table=True):
+    __tablename__:str = "travel_plans"
+    id: int = Field(default=None, primary_key=True)
+    user_id: int
+    city_id: int
+    lat: float
+    long: float
+    radius_km: float
+    rating: float
+    intent: str
+    model: str
+    city: str
+    country: str
+    travel_date: datetime = Field(default=None)
+    number_of_days: int = Field(default=1)
+    travel_plan: Optional[Any] = Field(default=None, sa_column=Column(JSON))
+    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+
+class PlacesQuery(SQLModel, table=True):
+    __tablename__: str = "places_queries"
+    
+    id: int = Field(default=None, primary_key=True)
+    lat: float
+    long: float
+    radius_km: float
+    query_type: str
+    query: str
+    city: str
+    country: str
+    places: Optional[List[Any]] = Field(default=None, sa_column=Column(JSON))
+    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    
+class PlanQuery(SQLModel, table=True):
+    __tablename__: str = "plan_queries"
+    
+    id: int = Field(default=None, primary_key=True)
+    plan_id: int = Field(foreign_key="travel_plans.id")
+    query_id: int = Field(foreign_key="places_queries.id")

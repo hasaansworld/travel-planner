@@ -7,7 +7,7 @@ DATABASE_URL = 'mysql+pymysql://user:password@db:3306/travel_planner'
 # Create engine
 engine = create_engine(
     DATABASE_URL,
-    echo=True,  # Set to False in production
+    echo=False,  # Set to False in production
     pool_pre_ping=True,  # Enables automatic reconnection
     pool_recycle=3600,   # Recycle connections every hour
 )

@@ -38,22 +38,12 @@ def generate_llm_response(messages, model_name, **kwargs):
         response = client.chat.completions.create(
             model=model_name,
             messages=messages,
+            response_format={ "type": "json_object" },
             temperature=temperature,
             top_p=top_p,
         )
-        
-        message = response.choices[0].message
-            
-        # Check if it's a function call
-        if message.function_call:
-            return {
-                "function_call": {
-                    "name": message.function_call.name,
-                    "arguments": json.loads(message.function_call.arguments)
-                }
-            }
-        else:
-            return message.content
+         
+        return response.choices[0].message.content
             
     except Exception as e:
         raise ValueError(f"Failed to generate response: {str(e)}")
