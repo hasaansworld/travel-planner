@@ -27,6 +27,7 @@ class PlaceResult:
     location: Location
     rating: Optional[float] = None
     user_rating_count: Optional[int] = None
+    primary_type: str = ""
     types: Optional[List[str]] = None
     address: Optional[str] = None
     opening_hours: Optional[Dict] = None
@@ -40,6 +41,7 @@ class PlaceResult:
             "location": {"latitude": self.location.latitude, "longitude": self.location.longitude},
             "rating": self.rating,
             "user_rating_count": self.user_rating_count,
+            "primary_type": self.primary_type,
             "types": self.types,
             "address": self.address,
             "opening_hours": self.opening_hours,
@@ -61,6 +63,7 @@ class PlaceResult:
             location=location,
             rating=data.get("rating"),
             user_rating_count=data.get("user_rating_count"),
+            primary_type=data.get("primary_type", ""),
             types=data.get("types"),
             address=data.get("address"),
             opening_hours=data.get("opening_hours"),
@@ -96,6 +99,7 @@ class UnifiedGooglePlacesAPI:
             "places.location,"
             "places.rating,"
             "places.userRatingCount,"
+            "places.primaryTypeDisplayName,"
             "places.types,"
             "places.formattedAddress,"
             "places.regularOpeningHours"
@@ -176,6 +180,7 @@ class UnifiedGooglePlacesAPI:
             "places.location,"
             "places.rating,"
             "places.userRatingCount,"
+            "places.primaryTypeDisplayName,"
             "places.types,"
             "places.formattedAddress,"
             "places.regularOpeningHours"
@@ -266,6 +271,9 @@ class UnifiedGooglePlacesAPI:
             
             rating = place_data.get("rating")
             user_rating_count = place_data.get("userRatingCount")
+            primary_type = place_data.get("primaryTypeDisplayName", "")
+            if primary_type:
+                primary_type = primary_type.get("text", "")
             types = place_data.get("types", [])
             address = place_data.get("formattedAddress")
             opening_hours = place_data.get("regularOpeningHours")
@@ -276,6 +284,7 @@ class UnifiedGooglePlacesAPI:
                 location=location,
                 rating=rating,
                 user_rating_count=user_rating_count,
+                primary_type=primary_type,
                 types=types,
                 address=address,
                 opening_hours=opening_hours,

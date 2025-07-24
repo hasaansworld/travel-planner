@@ -121,3 +121,17 @@ class PlanQuery(SQLModel, table=True):
     id: int = Field(default=None, primary_key=True)
     plan_id: int = Field(foreign_key="travel_plans.id")
     query_id: int = Field(foreign_key="places_queries.id")
+
+
+class NewUserVisit(SQLModel, table=True):
+    __tablename__:str = "new_user_visits"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.user_id")
+    lat: float
+    long: float
+    name: str
+    place_type: str
+    address: Optional[str] = Field(default=None)
+    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    

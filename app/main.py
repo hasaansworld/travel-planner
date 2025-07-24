@@ -15,11 +15,12 @@ import aiohttp
 import asyncio
 from urllib.parse import quote
 from dotenv import load_dotenv
-from sqlmodel import Session, asc, desc, func, select
+from sqlmodel import Session, asc, desc, distinct, func, select
+from app.clustering import cluster_places_by_location
 from app.database import create_db_and_tables, get_session
-from app.models import Category, PlacesQuery, PlanQuery, TravelPlan, UserFrequency
+from app.models import Category, NewUserVisit, PlacesQuery, PlanQuery, TravelPlan, UserFrequency
 import json
-from app.places import Location, PlaceResult, execute_search_queries, filter_and_sort_places, get_llm_queries
+from app.places import Location, PlaceResult, UnifiedGooglePlacesAPI, execute_search_queries, filter_and_sort_places, get_llm_queries
 from app.utils import generate_llm_response
 import time as time_module
 
@@ -57,13 +58,15 @@ async def get_plan_for_one_day(
     intent: str,
     user_activity: str,
     places_data: Any,
-    exclude_places: str
+    exclude_places: str,
+    clustering: bool = False
 ):
     
     system_prompt = f"""You are a travel planner assistant. 
     You will be provided with a user's past activity, user's travel intent, start date, number of days and places data fetched from Google Maps Places API (new).
     Your task is to generate a travel plan for the user based on the provided data.
     Keep in mind following constraints:
+    {"- If you are given places API data in clusters like cluster_0, cluster_1 and so on then choose all the places from a cluster with all the most popular places. Always recommend places from only one cluster." if clustering else ""}
     - Never recommend closed places, check for opening times of locations
     - Develop a natural plan according to times of day and account for travel times between places
     - Include meals and food in the plan according to user's preferences
@@ -75,6 +78,7 @@ async def get_plan_for_one_day(
     - **Respect user's food preferences like trying local food or some particular cuisine, don't recommend any other cuisine if user explitly mentioned one**
     - **Ensure at least 2 meals per day**
     - **Never recommend places user asks to exclude**
+    {"- Always recommend places from only one cluster." if clustering else ""}
     
     Your response should be a JSON object in the following format:
     {{
@@ -141,22 +145,28 @@ async def get_plan(
 ):
     try:
         # Get user activity data
-        query = (
-            select(Category.category_name)
-            .select_from(UserFrequency)
-            .join(Category)
-            .where(UserFrequency.poi_category_id == Category.category_id)
-            .where(UserFrequency.user_id == user_id)
-            .group_by(Category.category_name)
-            .order_by(desc(func.sum(UserFrequency.count)))
-        )
+        if user_id <= 125000:
+            query = (
+                select(Category.category_name)
+                .select_from(UserFrequency)
+                .join(Category)
+                .where(UserFrequency.poi_category_id == Category.category_id)
+                .where(UserFrequency.user_id == user_id)
+                .group_by(Category.category_name)
+                .order_by(desc(func.sum(UserFrequency.count)))
+            )
 
-        # Add city filter if provided
-        if city_id is not None:
-            query = query.where(UserFrequency.city_id == city_id)
+            # Add city filter if provided
+            if city_id is not None:
+                query = query.where(UserFrequency.city_id == city_id)
 
-        # Execute query
-        results = session.exec(query).all()
+            # Execute query
+            results = session.exec(query).all()
+        else:
+            unique_place_types_query = select(distinct(NewUserVisit.place_type)).where(
+                NewUserVisit.user_id == user_id
+            )
+            results = session.exec(unique_place_types_query).all()
 
         user_activity = ", ".join(results)
 
@@ -251,6 +261,12 @@ async def get_plan(
             max_results_per_query=20
         )
 
+        should_use_clustering = number_of_days > 1 and radius_km > 2
+        if should_use_clustering:
+            clustered_places = cluster_places_by_location(results, number_of_days)
+            print(clustered_places)
+            results = clustered_places
+
         day_name = start_date.strftime('%A')
         count = 0
         processed_data = {}
@@ -279,7 +295,7 @@ async def get_plan(
         for i in range(number_of_days):
             day_number = i + 1
             print("Making plan for day", day_number)
-            plan_per_day = await get_plan_for_one_day(city, country, start_date, day_name, intent, user_activity, places_data, ", ".join(excluded_places))
+            plan_per_day = await get_plan_for_one_day(city, country, start_date, day_name, intent, user_activity, places_data, ", ".join(excluded_places), clustering=should_use_clustering)
             for place in plan_per_day.get("itinerary", {}):
                 excluded_places.append(place.get("name", ""))
             
@@ -319,19 +335,22 @@ async def update_plan_for_one_day(
     start_day: str,
     message: str,
     places_data: Any,
-    exclude_places: str = ""
+    exclude_places: str = "",
+    clustering: bool = False,
 ):
     
     system_prompt = f"""You are a travel planner assistant. 
     You will be provided with a travel plan for one day, user message to update the travel plan and new data from places API according to user message.
     Your task is to generate a travel plan for the user based on the provided data.
     Keep in mind following constraints:
+    {"- If you are given places API data in clusters like cluster_0, cluster_1 and so on then choose all the places from the same cluster close to places in the existing plan." if clustering else ""}
     - Never recommend closed places, check for opening times of locations
     - Develop a natural plan according to times of day and account for travel times between places
     - Stay within the places API data provided by the user
     - Try to incorporate the new data according to the user message. Change original plan as per user requirement.
     - **Ensure at least 2 meals per day**
     - **Never recommend places user asks to exclude**
+    {"- Always recommend places from only one cluster." if clustering else ""}
     
     Your response should be a JSON object in the following format:
     {{
@@ -449,19 +468,26 @@ async def update_plan(
         fetch_data = fetch_data["fetch_data"]
         if fetch_data == "true":
             print("Need to fetch new data")
-            # Get user activity data
-            query = (
-                select(Category.category_name)
-                .select_from(UserFrequency)
-                .join(Category)
-                .where(UserFrequency.poi_category_id == Category.category_id)
-                .where(UserFrequency.user_id == user_id)
-                .group_by(Category.category_name)
-                .order_by(desc(func.sum(UserFrequency.count)))
-            )
 
-            # Execute query
-            results = session.exec(query).all()
+            # Get user activity data
+            if user_id <= 125000:
+                query = (
+                    select(Category.category_name)
+                    .select_from(UserFrequency)
+                    .join(Category)
+                    .where(UserFrequency.poi_category_id == Category.category_id)
+                    .where(UserFrequency.user_id == user_id)
+                    .group_by(Category.category_name)
+                    .order_by(desc(func.sum(UserFrequency.count)))
+                )
+
+                # Execute query
+                results = session.exec(query).all()
+            else:
+                unique_place_types_query = select(distinct(NewUserVisit.place_type)).where(
+                    NewUserVisit.user_id == user_id
+                )
+                results = session.exec(unique_place_types_query).all()
 
             user_activity = ", ".join(results)
 
@@ -497,6 +523,11 @@ async def update_plan(
                 max_results_per_query=20
             )
 
+            should_use_clustering = plan.number_of_days > 1 and plan.radius_km > 2
+            if should_use_clustering:
+                clustered_places = cluster_places_by_location(results, plan.number_of_days)
+                results = clustered_places
+
             day_name = plan.travel_date.strftime('%A')
             count = 0
             processed_data = {}
@@ -525,7 +556,7 @@ async def update_plan(
             if isinstance(travel_plan, dict):
                 for key in travel_plan:
                     print("Making plan for", key)
-                    plan_per_day = await update_plan_for_one_day(plan.city, plan.country, travel_plan, plan.travel_date, day_name, message, places_data, ", ".join(excluded_places))
+                    plan_per_day = await update_plan_for_one_day(plan.city, plan.country, travel_plan, plan.travel_date, day_name, message, places_data, ", ".join(excluded_places), clustering=should_use_clustering)
                     for place in plan_per_day.get("itinerary", {}):
                         excluded_places.append(place.get("name", ""))
                     
@@ -633,6 +664,77 @@ async def update_plan(
     return HTTPException(500, f"Error: {response}")
 
 
+@app.get("/get-nearby-places")
+async def get_nearby_places(
+    lat: float = Query(65.00978049249451, description="Latitude"),
+    long: float = Query(25.502957692471355, description="Longitude"),
+):
+    api_key = os.getenv("PLACES_API_KEY", "")
+    places_api = UnifiedGooglePlacesAPI(api_key)
+    location = Location(latitude=lat, longitude=long)
+    places = places_api.search_places_nearby(
+        location,
+        radius=60,
+        max_results=5,
+        sort_by_popularity=False
+    )
+
+    display_places = []
+    for place in places:
+        display_places.append({
+            "name": place.name,
+            "location": place.location,
+            "rating": place.rating,
+            "address": place.address,
+            "types": place.types
+        })
+
+    return {
+        "places": places,
+    }
+    
+
+@app.get("/user-visits")
+async def create_user_visit(
+    user_id: int = Query(125001),
+    lat: float = Query(65.00951909999999, description="Latitude"),
+    long: float = Query(25.5040852, description="Longitude"),
+    name: str = Query("City Biljard", description="Place name"),
+    place_type: str = Query("Sports Complex", description="Place type"),
+    address: Optional[str] = Query("Ylioppilaantie 4c, 90130 Oulu, Finland", description="Place address"),
+    session: Session = Depends(get_session)
+):
+    try:
+        # Create new user visit instance
+        new_visit = NewUserVisit(
+            user_id=user_id,
+            lat=lat,
+            long=long,
+            name=name,
+            place_type=place_type,
+            address=address
+        )
+        
+        # Add to session and commit
+        session.add(new_visit)
+        session.commit()
+        session.refresh(new_visit)
+
+        unique_place_types_query = select(distinct(NewUserVisit.place_type)).where(
+            NewUserVisit.user_id == user_id
+        )
+        unique_place_types = session.exec(unique_place_types_query).all()
+        
+        return {"success": True, "id": new_visit.id, "history": unique_place_types}
+        
+    except Exception as e:
+        session.rollback()
+        print(f"Error creating user visit: {str(e)}")
+        
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create user visit"
+        )
 
 if __name__ == "__main__":
     import uvicorn
