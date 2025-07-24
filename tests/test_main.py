@@ -48,6 +48,8 @@ def test_create_3_day_travel_plan_with_clustering():
     # 3. Verify the plan is for the correct number of days
     assert len(travel_plan) == params["number_of_days"], f"Expected a {params['number_of_days']}-day plan, but got {len(travel_plan)} days."
     
+    total_out_out_of_cluster = 0
+
     # 4. Verify the clustering rule for each day's itinerary
     for day, day_plan in travel_plan.items():
         itinerary = day_plan.get("itinerary", [])
@@ -75,11 +77,17 @@ def test_create_3_day_travel_plan_with_clustering():
 
             current_cluster = get_cluster_for_place(place_name, processed_data)
             
-            assert current_cluster == expected_cluster, (
-                f"Clustering rule violated on {day}. "
-                f"Place '{place_name}' is in cluster '{current_cluster}', "
-                f"but expected cluster '{expected_cluster}' (based on '{first_place_name}')."
-            )
+            if current_cluster != expected_cluster:
+                total_out_out_of_cluster += 1
+                print(
+                    f"Clustering rule violated on {day}. "
+                    f"Place '{place_name}' is in cluster '{current_cluster}', "
+                    f"but expected cluster '{expected_cluster}' (based on '{first_place_name}')."
+                )
+                
+        assert total_out_out_of_cluster == 0, (
+                f"{total_out_out_of_cluster} places out of cluster"
+        )
         
         print(f"Successfully validated {day}: All places are in cluster '{expected_cluster}'.")
 
