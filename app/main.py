@@ -735,6 +735,153 @@ async def create_user_visit(
             status_code=500,
             detail="Failed to create user visit"
         )
+    
+
+# Add this endpoint to your FastAPI app
+@app.get("/autocomplete")
+async def get_autocomplete_suggestions(
+    query: str = Query(..., description="Search query for place autocomplete", min_length=1),
+    session_token: Optional[str] = Query(None, description="Session token for billing optimization")
+):
+    """
+    Get autocomplete suggestions for places using Google Places Autocomplete API
+    """
+    try:
+        api_key = os.getenv("PLACES_API_KEY", "")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="Places API key not configured")
+        
+        url = "https://places.googleapis.com/v1/places:autocomplete"
+        
+        # Prepare the request payload
+        payload = {
+            "input": query,
+            "includeQueryPredictions": True
+        }
+        
+        # Add session token if provided (helps with billing)
+        if session_token:
+            payload["sessionToken"] = session_token
+        
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": api_key
+        }
+        
+        # Make the API request
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    
+                    # Parse and format the suggestions
+                    suggestions = []
+                    predictions = data.get("suggestions", [])
+                    
+                    # Limit to 5 results
+                    for prediction in predictions[:5]:
+                        place_prediction = prediction.get("placePrediction")
+                        if place_prediction:
+                            suggestion = {
+                                "place_id": place_prediction.get("placeId"),
+                                "text": place_prediction.get("text", {}).get("text", ""),
+                                "structured_formatting": {
+                                    "main_text": place_prediction.get("structuredFormat", {}).get("mainText", {}).get("text", ""),
+                                    "secondary_text": place_prediction.get("structuredFormat", {}).get("secondaryText", {}).get("text", "")
+                                },
+                                "types": place_prediction.get("types", []),
+                            }
+                            suggestions.append(suggestion)
+                    
+                    return {
+                        "suggestions": suggestions,
+                        "status": "success",
+                        "query": query
+                    }
+                
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Autocomplete API failed with status {response.status}: {error_text}")
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=f"Places API error: {error_text}"
+                    )
+                    
+    except aiohttp.ClientError as e:
+        logger.error(f"Network error in autocomplete: {e}")
+        raise HTTPException(status_code=503, detail="Network error connecting to Places API")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error in autocomplete: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/place-details")
+async def get_place_details(
+    place_id: str = Query(..., description="Google Places ID"),
+    fields: Optional[str] = Query(
+        "id,displayName,location,rating,userRatingCount,primaryTypeDisplayName,types,formattedAddress,regularOpeningHours",
+        description="Comma-separated list of fields to return"
+    )
+):
+    """
+    Get detailed information about a place using its place_id
+    """
+    try:
+        api_key = os.getenv("PLACES_API_KEY", "")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="Places API key not configured")
+        
+        url = f"https://places.googleapis.com/v1/places/{place_id}"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": api_key,
+            "X-Goog-FieldMask": fields
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    
+                    # Parse the place details similar to your existing _parse_place_data method
+                    location_data = data.get("location", {})
+                    
+                    place_details = {
+                        "id": data.get("id"),
+                        "name": data.get("displayName", {}).get("text", ""),
+                        "location": {
+                            "latitude": location_data.get("latitude"),
+                            "longitude": location_data.get("longitude")
+                        },
+                        "rating": data.get("rating"),
+                        "user_rating_count": data.get("userRatingCount"),
+                        "primary_type": data.get("primaryTypeDisplayName", {}).get("text", ""),
+                        "types": data.get("types", []),
+                        "address": data.get("formattedAddress"),
+                        "opening_hours": data.get("regularOpeningHours")
+                    }
+                    
+                    return {
+                        "place": place_details,
+                        "status": "success"
+                    }
+                
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Place details API failed with status {response.status}: {error_text}")
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=f"Places API error: {error_text}"
+                    )
+                    
+    except aiohttp.ClientError as e:
+        logger.error(f"Network error in place details: {e}")
+        raise HTTPException(status_code=503, detail="Network error connecting to Places API")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error in place details: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
