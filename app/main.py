@@ -732,7 +732,8 @@ async def get_nearby_places(
             "location": place.location,
             "rating": place.rating,
             "address": place.address,
-            "types": place.types
+            "types": place.types,
+            "photos": place.photos,
         })
 
     return {
