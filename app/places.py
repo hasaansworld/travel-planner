@@ -32,6 +32,7 @@ class PlaceResult:
     address: Optional[str] = None
     opening_hours: Optional[Dict] = None
     search_type: Optional[str] = None  
+    photos: Optional[List[str]] = None 
     
     def to_dict(self) -> Dict:
         """Convert PlaceResult to dictionary for JSON serialization"""
@@ -45,7 +46,8 @@ class PlaceResult:
             "types": self.types,
             "address": self.address,
             "opening_hours": self.opening_hours,
-            "search_type": self.search_type
+            "search_type": self.search_type,
+            "photos": self.photos
         }
     
     @classmethod
@@ -67,7 +69,8 @@ class PlaceResult:
             types=data.get("types"),
             address=data.get("address"),
             opening_hours=data.get("opening_hours"),
-            search_type=data.get("search_type")
+            search_type=data.get("search_type"),
+            photos=data.get("photos", [])
         )
 
 class UnifiedGooglePlacesAPI:
@@ -102,7 +105,8 @@ class UnifiedGooglePlacesAPI:
             "places.primaryTypeDisplayName,"
             "places.types,"
             "places.formattedAddress,"
-            "places.regularOpeningHours"
+            "places.regularOpeningHours,"
+            "places.photos"
         )
         
         while len(all_places) < max_results and requests_made < max_requests:
@@ -183,7 +187,8 @@ class UnifiedGooglePlacesAPI:
             "places.primaryTypeDisplayName,"
             "places.types,"
             "places.formattedAddress,"
-            "places.regularOpeningHours"
+            "places.regularOpeningHours,"
+            "places.photos"
         )
         
         while len(all_places) < max_results and requests_made < max_requests:
@@ -277,6 +282,10 @@ class UnifiedGooglePlacesAPI:
             types = place_data.get("types", [])
             address = place_data.get("formattedAddress")
             opening_hours = place_data.get("regularOpeningHours")
+            photos = place_data.get("photos", [])
+            photos = place_data.get("photos", [])
+            first_photo_name = photos[0].get("name") if photos and photos[0].get("name") else None
+            print("Extracted photos:", photos)
             
             return PlaceResult(
                 id=place_id,
@@ -288,7 +297,8 @@ class UnifiedGooglePlacesAPI:
                 types=types,
                 address=address,
                 opening_hours=opening_hours,
-                search_type=search_type
+                search_type=search_type,
+                photos=[first_photo_name] if first_photo_name else []
             )
             
         except Exception as e:

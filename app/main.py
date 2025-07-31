@@ -18,11 +18,12 @@ from dotenv import load_dotenv
 from sqlmodel import Session, asc, desc, distinct, func, select
 from app.clustering import cluster_places_by_location
 from app.database import create_db_and_tables, get_session
-from app.models import Category, NewUserVisit, PlacesQuery, PlanQuery, TravelPlan, UserFrequency
+from app.models import Category, NewUserVisit, PlacesQuery, PlanQuery, TravelPlan, User, UserFrequency
 import json
 from app.places import Location, PlaceResult, UnifiedGooglePlacesAPI, execute_search_queries, filter_and_sort_places, get_llm_queries
 from app.utils import generate_llm_response
 import time as time_module
+import requests
 
 load_dotenv()
 
@@ -305,6 +306,27 @@ async def get_plan(
         session.add(plan)
         session.commit()
 
+        # Enrich the travel plan with coordinates and images using `results`
+        # Flatten all places from results into a lookup dictionary for fast matching
+        place_lookup = {}
+        for category_places in results.values():
+            for place in category_places:
+                name = place.name
+                if name:
+                    place_lookup[name] = place
+
+        # Update each place in the travel plan
+        for _, day_data in travel_plan.items():
+            itinerary = day_data.get("itinerary", [])
+            for place in itinerary:
+                name = place.get("name")
+                matched = place_lookup.get(name)
+
+                if matched:
+                    place["location"] = matched.location
+                    place["photos"] = matched.photos
+                    place["rating"] = matched.rating
+
         return {
             "travel_plan_id": plan.id,
             "travel_plan": travel_plan,
@@ -564,10 +586,32 @@ async def update_plan(
                 plan.travel_plan = updated_travel_plan
                 session.add(plan)
                 session.commit()
+
+                # Flatten all full results into a lookup dictionary by name
+                place_lookup = {}
+                for category_places in results.values() if isinstance(results, dict) else [results]:
+                    for place in category_places:
+                        # Handle both dict and PlaceResult object cases
+                        name = place.get("name") if isinstance(place, dict) else getattr(place, "name", None)
+                        if name:
+                            place_lookup[name] = place
+
+                # Enrich the updated travel plan with location, photos, and rating
+                for _, day_data in updated_travel_plan.items():
+                    itinerary = day_data.get("itinerary", [])
+                    for place in itinerary:
+                        name = place.get("name")
+                        matched = place_lookup.get(name)
+                        if matched:
+                            # Depending on whether matched is a dict or object
+                            place["location"] = matched.get("location") if isinstance(matched, dict) else getattr(matched, "location", None)
+                            place["photos"] = matched.get("photos") if isinstance(matched, dict) else getattr(matched, "photos", None)
+                            place["rating"] = matched.get("rating") if isinstance(matched, dict) else getattr(matched, "rating", None)
+
             else:
                 print("travel_plan is not a dictionary")
             return {
-                "update_travel_plan": updated_travel_plan,
+                "travel_plan": updated_travel_plan,
                 "new_places": processed_data
             }
         else:
@@ -656,7 +700,7 @@ async def update_plan(
                 else:
                     print("travel_plan is not a dictionary")
                 return {
-                    "update_travel_plan": updated_travel_plan,
+                    "travel_plan": updated_travel_plan,
                     "new_places": processed_data
                 }
 
@@ -882,6 +926,83 @@ async def get_place_details(
     except Exception as e:
         logger.error(f"Unexpected error in place details: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+def verify_google_token(token: str, client_id: Optional[str] = None):
+    """
+    Verify Google ID token using Google's tokeninfo endpoint
+    """
+    try:
+        # Use Google's tokeninfo endpoint to verify the token
+        response = requests.get(
+            f"https://oauth2.googleapis.com/tokeninfo?id_token={token}",
+            timeout=10
+        )
+        
+        if response.status_code != 200:
+            raise ValueError("Invalid token")
+            
+        token_info = response.json()
+        
+        # Verify the audience (client ID) if GOOGLE_CLIENT_ID is set
+        if client_id and token_info.get('aud') != client_id:
+            raise ValueError("Invalid audience")
+            
+        return token_info
+        
+    except requests.RequestException as e:
+        raise ValueError(f"Network error during token verification: {str(e)}")
+    except Exception as e:
+        raise ValueError(f"Token verification failed: {str(e)}")
+
+
+def get_or_create_user(session: Session, email: str, name: str) -> "User":
+
+    # Try to find existing user by email
+    statement = select(User).where(User.email == email)
+    existing_user = session.exec(statement).first()
+    
+    if existing_user:
+        return existing_user
+    
+    # Create new user
+    new_user = User(
+        name=name,
+        email=email,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    
+    session.add(new_user)
+    session.commit()
+    session.refresh(new_user)
+    
+    return new_user
+
+@app.post("/auth/google")
+async def login_with_google(token_request, session: Session = Depends(get_session)):
+    try:
+        GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+
+        # Verify the Google ID token
+        token_info = verify_google_token(token_request.token, client_id=GOOGLE_CLIENT_ID)
+        
+        # Extract user information from Google
+        google_email = token_info['email']
+        google_name = token_info['name']
+        
+        # Get or create user in database
+        user = get_or_create_user(session, google_email, google_name)
+        
+
+        return {"user_id": user.user_id, "name": user.name, "email": user.email}
+        
+    except ValueError as e:
+        # Invalid token
+        raise HTTPException(status_code=401, detail=f"Invalid Google token: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Authentication failed")
+
 
 if __name__ == "__main__":
     import uvicorn
