@@ -448,6 +448,49 @@ async def update_plan(
     
     travel_plan = plan.travel_plan
 
+
+    system_prompt = """
+    You are a decision making system. You have to decide if the initial params of a travel plan need to be changed based on revision request by the user.
+    You will be provided with initial params of the travel plan and new message from the user. The initial params will be in the format:
+    { "radius_km": 2, "rating": 3.2, "number_of_days": 2}
+    radius_km is between 0 and 50 and rating is between 0 and 5 and number of days is between 1 and 5. Do not output values outside these ranges.
+    you have to output a boolean variable "params_changed" if the params need to be changed. You also need to provide any additional user intent in the "intent" key.
+    Your output should be in the following json format:
+    { "params_changed": true, "radius_km": 3, "rating": 4.0, "number_of_days": 3, "intent": "any new message by the user other than the initial params" }
+    """
+    params_dict = {
+        "radius_km": plan.radius_km,
+        "rating": plan.rating,
+        "number_of_days": plan.number_of_days
+    }
+    user_message = f"""
+    Initial Params: {params_dict}
+    Revision message from user: {message}
+    """
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message}
+    ]
+
+    print("Step 0: Checking if initial params changed")
+    response = generate_llm_response(
+        messages=messages,
+        model_name="llama",
+        temperature=0,
+    )
+
+    if response:
+        data = json.loads(response) or {}
+        params_changed = data.get("params_changed", False)
+        if params_changed:
+            intent = data.get("intent", "")
+            new_intent = plan.intent
+            if intent:
+                new_intent += f", {intent}"
+            return await get_plan(plan.user_id, city_id=plan.city_id, lat=plan.lat, lon=plan.long, radius_km=data.get("radius_km", plan.radius_km), rating=data.get("rating", plan.rating), intent=new_intent, start_date=plan.travel_date, number_of_days=data.get("number_of_days", plan.number_of_days), model=model, session=session)    
+    else:
+        print("Failed to get response from LLM for initial params check")
+
     statement = (
         select(PlacesQuery.query_type, PlacesQuery.query)
         .select_from(PlacesQuery, PlanQuery)
