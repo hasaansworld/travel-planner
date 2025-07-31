@@ -283,7 +283,6 @@ class UnifiedGooglePlacesAPI:
             address = place_data.get("formattedAddress")
             opening_hours = place_data.get("regularOpeningHours")
             photos = place_data.get("photos", [])
-            photos = place_data.get("photos", [])
             first_photo_name = photos[0].get("name") if photos and photos[0].get("name") else None
             print("Extracted photos:", photos)
             
