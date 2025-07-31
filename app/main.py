@@ -613,6 +613,7 @@ async def update_plan(
             else:
                 print("travel_plan is not a dictionary")
             return {
+                "travel_plan_id": plan.id,
                 "travel_plan": updated_travel_plan,
                 "new_places": processed_data
             }
@@ -702,6 +703,7 @@ async def update_plan(
                 else:
                     print("travel_plan is not a dictionary")
                 return {
+                    "travel_plan_id": plan.id,
                     "travel_plan": updated_travel_plan,
                     "new_places": processed_data
                 }
