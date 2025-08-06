@@ -12,7 +12,7 @@ MYSQL_PASSWORD = os.getenv("MYSQL_ROOT_PASSWORD", "password")
 
 # Database configuration
 DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
-
+print(DATABASE_URL)
 # Create engine
 engine = create_engine(
     DATABASE_URL,
