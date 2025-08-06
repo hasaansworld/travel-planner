@@ -4,19 +4,24 @@ from typing import Generator
 from dotenv import load_dotenv
 
 load_dotenv()
-user = os.getenv("MYSQL_USER", "user")
-password = os.getenv("MYSQL_PASSWORD", "password")
-database = os.getenv("MYSQL_DATABASE", "travel_planner")
-print("Initial credentials", user, password, database)
+MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
+MYSQL_PORT = 3306
+MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "travel_planner")
+MYSQL_USER = os.getenv("MYSQL_USER", "user")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "password")
+
 # Database configuration
-DATABASE_URL = f"mysql+pymysql://{user}:{password}@db:3306/{database}"
+DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
 
 # Create engine
 engine = create_engine(
     DATABASE_URL,
     echo=False,  # Set to False in production
-    pool_pre_ping=True,  # Enables automatic reconnection
-    pool_recycle=3600,   # Recycle connections every hour
+    pool_pre_ping=True,        # Test connections before use
+    pool_recycle=3600,         # Recycle connections every hour
+    pool_size=10,              # Number of connections to maintain
+    max_overflow=20,           # Additional connections if needed
+    pool_timeout=30,   # Recycle connections every hour
 )
 
 def create_db_and_tables():

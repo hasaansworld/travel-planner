@@ -7,8 +7,10 @@ services:
       - "${APP_PORT:-8000}:8000"
     volumes:
       - .:/code
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=mysql://${MYSQL_USER:-user}:${MYSQL_PASSWORD:-password}@db:3306/${MYSQL_DATABASE:-travel_planner}
+      - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:${DB_PORT}/${MYSQL_DATABASE}
       - MYSQL_HOST=db
       - MYSQL_PORT=3306
       - MYSQL_DATABASE=${MYSQL_DATABASE:-travel_planner}
