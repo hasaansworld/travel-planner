@@ -1,8 +1,15 @@
+import os
 from sqlmodel import SQLModel, create_engine, Session
 from typing import Generator
+from dotenv import load_dotenv
+
+load_dotenv()
+user = os.getenv("MYSQL_USER", "user")
+password = os.getenv("MYSQL_PASSWORD", "password")
+database = os.getenv("MYSQL_DATABASE", "travel_planner")
 
 # Database configuration
-DATABASE_URL = 'mysql+pymysql://user:password@db:3306/travel_planner'
+DATABASE_URL = f"mysql+pymysql://{user}:{password}@db:3306/{database}"
 
 # Create engine
 engine = create_engine(
