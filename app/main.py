@@ -87,7 +87,7 @@ async def get_plan_for_one_day(
     - **Ensure minimum 6 places per day and include sufficient meals. Never recommend less than 6 places per day!**
     - **Local food or local cuisine means that country's food, disregard other countries' food if user asks for local food**
     - Try to include snacks, coffee or other light food if there is in the places data
-    - Always include a specific place from the places data, don't recommend some generic recommendation like "a local restaurant" or "a local cafe"
+    - ## Always include a specific place from the places data, don't recommend some generic recommendation like "a local restaurant" or "a local cafe"
     - **Respect user's food preferences like trying local food or some particular cuisine, don't recommend any other cuisine if user explitly mentioned one**
     - **Ensure at least 2 meals per day**
     - **Never recommend places user asks to exclude**
@@ -401,7 +401,7 @@ async def update_plan_for_one_day(
     - Never recommend closed places, check for opening times of locations
     - Develop a natural plan according to times of day and account for travel times between places
     - Stay within the places API data provided by the user
-    - Always include a specific place from the places data, don't recommend some generic recommendation like "a local restaurant" or "a local cafe"
+    - ## Always include a specific place from the places data, don't recommend some generic recommendation like "a local restaurant" or "a local cafe"
     - Try to incorporate the new data according to the user message. Change original plan as per user requirement.
     - **Ensure at least 2 meals per day**
     - **Never recommend places user asks to exclude**
