@@ -7,10 +7,11 @@ import requests
 import time
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlmodel import Session, select
 
-from app.models import PlacesQuery, PlanQuery
+from app.models import PlacesQuery, PlanQuery, Place, PlanPlace
 from app.utils import generate_llm_response
 
 load_dotenv()
@@ -72,6 +73,81 @@ class PlaceResult:
             search_type=data.get("search_type"),
             photos=data.get("photos", [])
         )
+
+def upsert_place(session: Session, place_result: PlaceResult) -> Place:
+    """Insert a new place or update existing one in the database"""
+    
+    # Check if place already exists
+    existing_place = session.exec(
+        select(Place).where(Place.place_id == place_result.id)
+    ).first()
+    
+    if existing_place:
+        # Update existing place
+        existing_place.name = place_result.name
+        existing_place.latitude = place_result.location.latitude
+        existing_place.longitude = place_result.location.longitude
+        existing_place.rating = place_result.rating
+        existing_place.user_rating_count = place_result.user_rating_count
+        existing_place.primary_type = place_result.primary_type
+        existing_place.types = place_result.types
+        existing_place.address = place_result.address
+        existing_place.opening_hours = place_result.opening_hours
+        existing_place.photos = place_result.photos
+        existing_place.search_type = place_result.search_type
+        existing_place.updated_at = datetime.utcnow()
+        
+        session.add(existing_place)
+        return existing_place
+    else:
+        # Create new place
+        new_place = Place(
+            place_id=place_result.id,
+            name=place_result.name,
+            latitude=place_result.location.latitude,
+            longitude=place_result.location.longitude,
+            rating=place_result.rating,
+            user_rating_count=place_result.user_rating_count,
+            primary_type=place_result.primary_type,
+            types=place_result.types,
+            address=place_result.address,
+            opening_hours=place_result.opening_hours,
+            photos=place_result.photos,
+            search_type=place_result.search_type
+        )
+        
+        session.add(new_place)
+        return new_place
+
+def link_place_to_plan(session: Session, plan_id: int, place_id: str) -> None:
+    """Create a link between a plan and a place"""
+    
+    # Check if the relationship already exists
+    existing_link = session.exec(
+        select(PlanPlace).where(
+            PlanPlace.plan_id == plan_id,
+            PlanPlace.place_id == place_id
+        )
+    ).first()
+    
+    if not existing_link:
+        plan_place = PlanPlace(
+            plan_id=plan_id,
+            place_id=place_id
+        )
+        session.add(plan_place)
+
+def get_places_for_plan(session: Session, plan_id: int) -> List[Place]:
+    """Get all places associated with a specific plan"""
+    
+    statement = (
+        select(Place)
+        .join(PlanPlace)
+        .where(PlanPlace.plan_id == plan_id)
+    )
+    
+    places = session.exec(statement).all()
+    return list(places)
 
 class UnifiedGooglePlacesAPI:
     def __init__(self, api_key: str):
@@ -410,7 +486,7 @@ def execute_search_queries(
     radius_km: int = 5,
     max_results_per_query: int = 20
 ) -> Dict[str, List[PlaceResult]]:
-    """Execute search queries using the appropriate API endpoints"""
+    """Execute search queries using the appropriate API endpoints and store places in database"""
     
     api_key = os.getenv("PLACES_API_KEY", "")
     places_api = UnifiedGooglePlacesAPI(api_key)
@@ -444,6 +520,13 @@ def execute_search_queries(
                 for place_dict in place_query.places:
                     cached_places.append(PlaceResult.from_dict(place_dict))
             results[query_key] = cached_places
+
+            # Store places in new database structure and link to plan
+            for place_result in cached_places:
+                # Upsert place into places table
+                upsert_place(session, place_result)
+                # Link place to plan
+                link_place_to_plan(session, plan_id, place_result.id)
 
             plan_query = PlanQuery(
                 plan_id=plan_id,
@@ -484,7 +567,14 @@ def execute_search_queries(
             results[query_key] = places
 
             if places:
-                # Convert PlaceResult objects to dictionaries for database storage
+                # Store places in new database structure
+                for place_result in places:
+                    # Upsert place into places table
+                    upsert_place(session, place_result)
+                    # Link place to plan
+                    link_place_to_plan(session, plan_id, place_result.id)
+
+                # Convert PlaceResult objects to dictionaries for legacy database storage
                 places_dict_list = [place.to_dict() for place in places]
 
                 places_query = PlacesQuery(

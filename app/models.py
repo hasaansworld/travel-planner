@@ -59,34 +59,12 @@ class UserFrequency(SQLModel, table=True):
     poi_category_id: int = Field(foreign_key="categories.category_id")
     count: int = Field(default=0)
     
-# Pydantic models for API responses (optional but recommended)
-class UserRead(SQLModel):
-    user_id: int
-    name: Optional[str] = None
-    email: Optional[str] = None
-    created_at: datetime
-
-class UserCreate(SQLModel):
-    name: Optional[str] = None
-    email: Optional[str] = None
-    password: Optional[str] = None  # Plain password for input, will be hashed
-
-class CityRead(SQLModel):
-    city_id: int
-    city_name: str
-
-class POICountRead(SQLModel):
-    x: int
-    y: int
-    poi_category_id: int
-    poi_count: int
-    city_id: int
-
 class TravelPlan(SQLModel, table=True):
     __tablename__:str = "travel_plans"
     id: int = Field(default=None, primary_key=True)
     user_id: int
     city_id: int
+    update_for: Optional[int] = Field(default=None)
     lat: float
     long: float
     radius_km: float
@@ -122,6 +100,37 @@ class PlanQuery(SQLModel, table=True):
     plan_id: int = Field(foreign_key="travel_plans.id")
     query_id: int = Field(foreign_key="places_queries.id")
 
+# NEW TABLE: Store individual places with all their details
+class Place(SQLModel, table=True):
+    __tablename__: str = "places"
+    
+    place_id: str = Field(primary_key=True)  # Google Maps place ID
+    name: str = Field(max_length=500)
+    latitude: float
+    longitude: float
+    rating: Optional[float] = Field(default=None)
+    user_rating_count: Optional[int] = Field(default=None)
+    primary_type: Optional[str] = Field(default=None, max_length=255)
+    types: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
+    address: Optional[str] = Field(default=None, max_length=1000)
+    opening_hours: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    photos: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
+    search_type: Optional[str] = Field(default=None, max_length=50)  # "nearby" or "text"
+    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+
+# NEW TABLE: Many-to-many relationship between plans and places
+class PlanPlace(SQLModel, table=True):
+    __tablename__: str = "plan_places"
+    
+    id: int = Field(default=None, primary_key=True)
+    plan_id: int = Field(foreign_key="travel_plans.id")
+    place_id: str = Field(foreign_key="places.place_id")
+    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    
+    # Add unique constraint on plan_id + place_id combination
+    class Config:
+        table_args = {"indexes": [("plan_id", "place_id")]}
 
 class NewUserVisit(SQLModel, table=True):
     __tablename__:str = "new_user_visits"
@@ -134,4 +143,3 @@ class NewUserVisit(SQLModel, table=True):
     place_type: str
     address: Optional[str] = Field(default=None)
     created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
-    

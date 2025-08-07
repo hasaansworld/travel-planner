@@ -18,9 +18,9 @@ from dotenv import load_dotenv
 from sqlmodel import Session, asc, desc, distinct, func, select
 from app.clustering import cluster_places_by_location
 from app.database import create_db_and_tables, get_session
-from app.models import Category, NewUserVisit, PlacesQuery, PlanQuery, TravelPlan, User, UserFrequency
+from app.models import Category, NewUserVisit, PlacesQuery, PlanQuery, TravelPlan, User, UserFrequency, Place, PlanPlace
 import json
-from app.places import Location, PlaceResult, UnifiedGooglePlacesAPI, execute_search_queries, filter_and_sort_places, get_llm_queries
+from app.places import Location, PlaceResult, UnifiedGooglePlacesAPI, execute_search_queries, filter_and_sort_places, get_llm_queries, get_places_for_plan
 from app.utils import generate_llm_response
 import time as time_module
 import requests
@@ -307,14 +307,20 @@ async def get_plan(
         session.add(plan)
         session.commit()
 
-        # Enrich the travel plan with coordinates and images using `results`
-        # Flatten all places from results into a lookup dictionary for fast matching
+        # NEW: Get places from database and enrich the travel plan
+        plan_places = get_places_for_plan(session, plan.id)
+        
+        # Create lookup dictionary for fast matching
         place_lookup = {}
-        for category_places in results.values():
-            for place in category_places:
-                name = place.name
-                if name:
-                    place_lookup[name] = place
+        for place in plan_places:
+            place_lookup[place.name] = {
+                "location": {"latitude": place.latitude, "longitude": place.longitude},
+                "photos": place.photos or [],
+                "rating": place.rating,
+                "address": place.address,
+                "opening_hours": place.opening_hours,
+                "types": place.types or []
+            }
 
         # Update each place in the travel plan
         for _, day_data in travel_plan.items():
@@ -324,9 +330,12 @@ async def get_plan(
                 matched = place_lookup.get(name)
 
                 if matched:
-                    place["location"] = matched.location
-                    place["photos"] = matched.photos
-                    place["rating"] = matched.rating
+                    place["location"] = matched["location"]
+                    place["photos"] = matched["photos"]
+                    place["rating"] = matched["rating"]
+                    place["address"] = matched["address"]
+                    place["opening_hours"] = matched["opening_hours"]
+                    place["types"] = matched["types"]
 
         return {
             "travel_plan_id": plan.id,
@@ -632,26 +641,35 @@ async def update_plan(
                 session.add(plan)
                 session.commit()
 
-                # Flatten all full results into a lookup dictionary by name
+                # NEW: Get places from database and enrich the travel plan
+                plan_places = get_places_for_plan(session, plan.id)
+                
+                # Create lookup dictionary for fast matching
                 place_lookup = {}
-                for category_places in results.values() if isinstance(results, dict) else [results]:
-                    for place in category_places:
-                        # Handle both dict and PlaceResult object cases
-                        name = place.get("name") if isinstance(place, dict) else getattr(place, "name", None)
-                        if name:
-                            place_lookup[name] = place
+                for place in plan_places:
+                    place_lookup[place.name] = {
+                        "location": {"latitude": place.latitude, "longitude": place.longitude},
+                        "photos": place.photos or [],
+                        "rating": place.rating,
+                        "address": place.address,
+                        "opening_hours": place.opening_hours,
+                        "types": place.types or []
+                    }
 
-                # Enrich the updated travel plan with location, photos, and rating
+                # Update each place in the travel plan
                 for _, day_data in updated_travel_plan.items():
                     itinerary = day_data.get("itinerary", [])
                     for place in itinerary:
                         name = place.get("name")
                         matched = place_lookup.get(name)
+
                         if matched:
-                            # Depending on whether matched is a dict or object
-                            place["location"] = matched.get("location") if isinstance(matched, dict) else getattr(matched, "location", None)
-                            place["photos"] = matched.get("photos") if isinstance(matched, dict) else getattr(matched, "photos", None)
-                            place["rating"] = matched.get("rating") if isinstance(matched, dict) else getattr(matched, "rating", None)
+                            place["location"] = matched["location"]
+                            place["photos"] = matched["photos"]
+                            place["rating"] = matched["rating"]
+                            place["address"] = matched["address"]
+                            place["opening_hours"] = matched["opening_hours"]
+                            place["types"] = matched["types"]
 
             else:
                 print("travel_plan is not a dictionary")
@@ -743,6 +761,37 @@ async def update_plan(
                     plan.travel_plan = updated_travel_plan
                     session.add(plan)
                     session.commit()
+
+                    # NEW: Get places from database and enrich the travel plan
+                    plan_places = get_places_for_plan(session, plan.id)
+                    
+                    # Create lookup dictionary for fast matching
+                    place_lookup = {}
+                    for place in plan_places:
+                        place_lookup[place.name] = {
+                            "location": {"latitude": place.latitude, "longitude": place.longitude},
+                            "photos": place.photos or [],
+                            "rating": place.rating,
+                            "address": place.address,
+                            "opening_hours": place.opening_hours,
+                            "types": place.types or []
+                        }
+
+                    # Update each place in the travel plan
+                    for _, day_data in updated_travel_plan.items():
+                        itinerary = day_data.get("itinerary", [])
+                        for place in itinerary:
+                            name = place.get("name")
+                            matched = place_lookup.get(name)
+
+                            if matched:
+                                place["location"] = matched["location"]
+                                place["photos"] = matched["photos"]
+                                place["rating"] = matched["rating"]
+                                place["address"] = matched["address"]
+                                place["opening_hours"] = matched["opening_hours"]
+                                place["types"] = matched["types"]
+
                 else:
                     print("travel_plan is not a dictionary")
                 return {
