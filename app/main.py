@@ -765,7 +765,7 @@ async def get_nearby_places(
     location = Location(latitude=lat, longitude=long)
     places = places_api.search_places_nearby(
         location,
-        radius=60,
+        radius=120,
         max_results=5,
         sort_by_popularity=False
     )
