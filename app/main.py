@@ -1134,6 +1134,173 @@ async def get_user_plans(
        logger.error(f"Error fetching user plans: {e}")
        raise HTTPException(status_code=500, detail="Failed to fetch user plans")
 
+@app.get("/plan/{plan_id}")
+async def get_plan_by_id(
+   plan_id: int,
+   user_id: int = Query(..., description="User ID for authorization"),
+   session: Session = Depends(get_session)
+):
+   """
+   Get a specific travel plan by ID along with all its updates
+   """
+   try:
+       # Query for the main plan with user authorization
+       query = (
+           select(TravelPlan)
+           .where(TravelPlan.id == plan_id)
+           .where(TravelPlan.user_id == user_id)  # Ensure user owns the plan
+       )
+       
+       plan = session.exec(query).first()
+       
+       if not plan:
+           raise HTTPException(status_code=404, detail="Travel plan not found")
+       
+       # Get all update plans for this plan (including nested updates)
+       def get_all_updates(original_plan_id: int) -> list:
+           updates_query = (
+               select(TravelPlan)
+               .where(TravelPlan.update_for == original_plan_id)
+               .where(TravelPlan.user_id == user_id)
+               .order_by(asc(TravelPlan.created_at))
+           )
+           updates = session.exec(updates_query).all()
+           
+           all_updates = []
+           for update in updates:
+               all_updates.append(update)
+               # Recursively get updates of updates
+               nested_updates = get_all_updates(update.id)
+               all_updates.extend(nested_updates)
+           
+           return all_updates
+       
+       # Get all updates (if this is an original plan) or find the original plan
+       if plan.update_for is None:
+           # This is an original plan, get all its updates
+           original_plan = plan
+           update_plans = get_all_updates(plan.id)
+       else:
+           # This is an update plan, find the original and all updates
+           original_query = (
+               select(TravelPlan)
+               .where(TravelPlan.id == plan.update_for)
+               .where(TravelPlan.user_id == user_id)
+           )
+           original_plan = session.exec(original_query).first()
+           
+           if not original_plan:
+               raise HTTPException(status_code=404, detail="Original plan not found")
+           
+           update_plans = get_all_updates(original_plan.id)
+       
+       # Function to enrich a single plan with place data
+       def enrich_plan_with_places(travel_plan_data, plan_obj):
+           # Get places from database for this plan
+           plan_places = get_places_for_plan(session, plan_obj.id)
+           
+           # Create lookup dictionary for fast matching
+           place_lookup = {}
+           for place in plan_places:
+               place_lookup[place.name] = {
+                   "location": {"latitude": place.latitude, "longitude": place.longitude},
+                   "photos": place.photos or [],
+                   "rating": place.rating,
+                   "address": place.address,
+                   "opening_hours": place.opening_hours,
+                   "types": place.types or []
+               }
+
+           # Enrich travel plan with place data and distances
+           enriched_travel_plan = travel_plan_data
+           if enriched_travel_plan and isinstance(enriched_travel_plan, dict):
+               for _, day_data in enriched_travel_plan.items():
+                   itinerary = day_data.get("itinerary", [])
+                   for place in itinerary:
+                       name = place.get("name")
+                       matched = place_lookup.get(name)
+
+                       if matched:
+                           place["location"] = matched["location"]
+                           place["photos"] = matched["photos"]
+                           place["rating"] = matched["rating"]
+                           place["address"] = matched["address"]
+                           place["opening_hours"] = matched["opening_hours"]
+                           place["types"] = matched["types"]
+                           
+                           # Calculate distance from user location to this place
+                           place_lat = matched["location"].get("latitude")
+                           place_lon = matched["location"].get("longitude")
+                           if place_lat is not None and place_lon is not None:
+                               distance = calculate_distance_meters(plan_obj.lat, plan_obj.long, place_lat, place_lon)
+                               place["distance"] = int(distance * 1000)  # Convert to meters
+                           else:
+                               place["distance"] = None
+                       else:
+                           place["distance"] = None
+           
+           return enriched_travel_plan
+       
+       # Enrich original plan
+       enriched_original_plan = enrich_plan_with_places(original_plan.travel_plan, original_plan)
+       
+       # Build original plan response
+       original_plan_data = {
+           "travel_plan_id": original_plan.id,
+           "travel_plan": enriched_original_plan,
+           "city": original_plan.city,
+           "country": original_plan.country,
+           "intent": original_plan.intent,
+           "start_date": original_plan.travel_date.isoformat() if original_plan.travel_date else None,
+           "number_of_days": original_plan.number_of_days,
+           "rating": original_plan.rating,
+           "radius_km": original_plan.radius_km,
+           "lat": original_plan.lat,
+           "lon": original_plan.long,
+           "model": original_plan.model,
+           "created_at": original_plan.created_at.isoformat() if original_plan.created_at else None,
+           "update_for": original_plan.update_for,
+           "day_name": original_plan.travel_date.strftime('%A') if original_plan.travel_date else None
+       }
+       
+       # Build update plans response
+       update_plans_data = []
+       for update_plan in update_plans:
+           enriched_update_plan = enrich_plan_with_places(update_plan.travel_plan, update_plan)
+           
+           update_plan_data = {
+               "travel_plan_id": update_plan.id,
+               "travel_plan": enriched_update_plan,
+               "city": update_plan.city,
+               "country": update_plan.country,
+               "intent": update_plan.intent,
+               "start_date": update_plan.travel_date.isoformat() if update_plan.travel_date else None,
+               "number_of_days": update_plan.number_of_days,
+               "rating": update_plan.rating,
+               "radius_km": update_plan.radius_km,
+               "lat": update_plan.lat,
+               "lon": update_plan.long,
+               "model": update_plan.model,
+               "created_at": update_plan.created_at.isoformat() if update_plan.created_at else None,
+               "update_for": update_plan.update_for,
+               "day_name": update_plan.travel_date.strftime('%A') if update_plan.travel_date else None
+           }
+           update_plans_data.append(update_plan_data)
+       
+       return {
+           "original_plan": original_plan_data,
+           "update_plans": update_plans_data,
+           "total_updates": len(update_plans_data),
+           "requested_plan_id": plan_id,
+           "is_original": plan.update_for is None
+       }
+       
+   except HTTPException:
+       raise
+   except Exception as e:
+       logger.error(f"Error fetching plan by ID: {e}")
+       raise HTTPException(status_code=500, detail="Failed to fetch travel plan")
+   
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
