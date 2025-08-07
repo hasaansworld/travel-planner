@@ -450,12 +450,12 @@ async def update_plan(
         .where(TravelPlan.id == plan_id)
     )
 
-    plan = session.exec(query).first()
+    original_plan = session.exec(query).first()
     
-    if not plan:
+    if not original_plan:
         raise HTTPException(404, "Travel plan not found")
     
-    travel_plan = plan.travel_plan
+    travel_plan = original_plan.travel_plan
 
 
     system_prompt = """
@@ -468,9 +468,9 @@ async def update_plan(
     { "params_changed": true, "radius_km": 3, "rating": 4.0, "number_of_days": 3, "intent": "any new message by the user other than the initial params" }
     """
     params_dict = {
-        "radius_km": plan.radius_km,
-        "rating": plan.rating,
-        "number_of_days": plan.number_of_days
+        "radius_km": original_plan.radius_km,
+        "rating": original_plan.rating,
+        "number_of_days": original_plan.number_of_days
     }
     user_message = f"""
     Initial Params: {params_dict}
@@ -493,10 +493,10 @@ async def update_plan(
         params_changed = data.get("params_changed", False)
         if params_changed:
             intent = data.get("intent", "")
-            new_intent = plan.intent
+            new_intent = original_plan.intent
             if intent:
                 new_intent += f", {intent}"
-            return await get_plan(plan.user_id, city_id=plan.city_id, lat=plan.lat, lon=plan.long, radius_km=data.get("radius_km", plan.radius_km), rating=data.get("rating", plan.rating), intent=new_intent, start_date=plan.travel_date, number_of_days=data.get("number_of_days", plan.number_of_days), model=model, session=session)    
+            return await get_plan(original_plan.user_id, city_id=original_plan.city_id, lat=original_plan.lat, lon=original_plan.long, radius_km=data.get("radius_km", original_plan.radius_km), rating=data.get("rating", original_plan.rating), intent=new_intent, start_date=original_plan.travel_date, number_of_days=data.get("number_of_days", original_plan.number_of_days), model=model, session=session)    
     else:
         print("Failed to get response from LLM for initial params check")
 
@@ -542,6 +542,35 @@ async def update_plan(
     if response:
         fetch_data = json.loads(response) or {"fetch_data": False}
         fetch_data = fetch_data["fetch_data"]
+        
+        # Create new travel plan record (common for both paths)
+        new_plan = TravelPlan(
+            user_id=original_plan.user_id,
+            city_id=original_plan.city_id,
+            update_for=original_plan.id,  # Reference to original plan
+            lat=original_plan.lat,
+            long=original_plan.long,
+            radius_km=original_plan.radius_km,
+            rating=original_plan.rating,
+            intent=f"{original_plan.intent}, {message}",  # Include update message in intent
+            model=model,
+            city=original_plan.city,
+            country=original_plan.country,
+            travel_date=original_plan.travel_date,
+            number_of_days=original_plan.number_of_days,
+            created_at=datetime.now()
+        )
+        session.add(new_plan)
+        session.commit()
+        session.refresh(new_plan)
+
+        # Copy all existing places from original plan to new plan (common for both paths)
+        original_plan_places = get_places_for_plan(session, original_plan.id)
+        for place in original_plan_places:
+            from app.places import link_place_to_plan
+            link_place_to_plan(session, new_plan.id, place.place_id)
+        session.commit()
+        
         if fetch_data == "true":
             print("Need to fetch new data")
 
@@ -570,8 +599,8 @@ async def update_plan(
             print("Step 2: Getting search queries from LLM...")
             queries = get_llm_queries(
                 user_activity=user_activity,
-                country=plan.country,
-                city=plan.city,
+                country=original_plan.country,
+                city=original_plan.city,
                 intent=message,
                 model=model,
                 exclude_queries=queries
@@ -584,27 +613,27 @@ async def update_plan(
             for i, query in enumerate(queries, 1):
                 print(f"  {i}. {query}")
 
-            # Step 2: Execute search queries
+            # Step 2: Execute search queries with new plan ID
             print("\nStep 2: Executing search queries...")
 
-            location = Location(latitude=plan.lat, longitude=plan.long)
+            location = Location(latitude=original_plan.lat, longitude=original_plan.long)
             results = execute_search_queries(
                 queries=queries,
-                plan_id=plan.id,
+                plan_id=new_plan.id,  # Use new plan ID
                 location=location,
                 session=session,
-                city=plan.city,
-                country=plan.country,
-                radius_km=int(plan.radius_km),
+                city=original_plan.city,
+                country=original_plan.country,
+                radius_km=int(original_plan.radius_km),
                 max_results_per_query=20
             )
 
-            should_use_clustering = plan.number_of_days > 1 and plan.radius_km > 2
+            should_use_clustering = original_plan.number_of_days > 1 and original_plan.radius_km > 2
             if should_use_clustering:
-                clustered_places = cluster_places_by_location(results, plan.number_of_days)
+                clustered_places = cluster_places_by_location(results, original_plan.number_of_days)
                 results = clustered_places
 
-            day_name = plan.travel_date.strftime('%A')
+            day_name = original_plan.travel_date.strftime('%A')
             count = 0
             processed_data = {}
             seen_places = set()  # Track place names we've already seen
@@ -616,7 +645,7 @@ async def update_plan(
                 unique_places = []
                 for place in filtered_places:
                     place_name = place.get("name")
-                    if place_name and place_name not in seen_places and (place.get("rating") or 0) >= plan.rating:
+                    if place_name and place_name not in seen_places and (place.get("rating") or 0) >= original_plan.rating:
                         unique_places.append(place)
                         seen_places.add(place_name)
                         count += 1
@@ -632,54 +661,17 @@ async def update_plan(
             if isinstance(travel_plan, dict):
                 for key in travel_plan:
                     print("Making plan for", key)
-                    plan_per_day = await update_plan_for_one_day(plan.city, plan.country, travel_plan, plan.travel_date, day_name, message, places_data, ", ".join(excluded_places), clustering=should_use_clustering)
+                    plan_per_day = await update_plan_for_one_day(original_plan.city, original_plan.country, travel_plan, original_plan.travel_date, day_name, message, places_data, ", ".join(excluded_places), clustering=should_use_clustering)
                     for place in plan_per_day.get("itinerary", {}):
                         excluded_places.append(place.get("name", ""))
                     
                     updated_travel_plan[key] = plan_per_day
-                plan.travel_plan = updated_travel_plan
-                session.add(plan)
-                session.commit()
-
-                # NEW: Get places from database and enrich the travel plan
-                plan_places = get_places_for_plan(session, plan.id)
-                
-                # Create lookup dictionary for fast matching
-                place_lookup = {}
-                for place in plan_places:
-                    place_lookup[place.name] = {
-                        "location": {"latitude": place.latitude, "longitude": place.longitude},
-                        "photos": place.photos or [],
-                        "rating": place.rating,
-                        "address": place.address,
-                        "opening_hours": place.opening_hours,
-                        "types": place.types or []
-                    }
-
-                # Update each place in the travel plan
-                for _, day_data in updated_travel_plan.items():
-                    itinerary = day_data.get("itinerary", [])
-                    for place in itinerary:
-                        name = place.get("name")
-                        matched = place_lookup.get(name)
-
-                        if matched:
-                            place["location"] = matched["location"]
-                            place["photos"] = matched["photos"]
-                            place["rating"] = matched["rating"]
-                            place["address"] = matched["address"]
-                            place["opening_hours"] = matched["opening_hours"]
-                            place["types"] = matched["types"]
-
             else:
                 print("travel_plan is not a dictionary")
-            return {
-                "travel_plan_id": plan.id,
-                "travel_plan": updated_travel_plan,
-                "new_places": processed_data
-            }
+                
         else:
             print("No need to fetch new data")
+            
             system_prompt = """
             You are a decision making system. You have to decide if there is a need to retrieve existing places data for a travel plan based on revision request by the user.
             You will be provided with existing queries to the places API, a travel plan and new message from the user. 
@@ -722,7 +714,7 @@ async def update_plan(
                         select(PlacesQuery.places, PlacesQuery.query_type, PlacesQuery.query)
                         .join(PlanQuery)
                         .where(PlacesQuery.id == PlanQuery.query_id)
-                        .where(PlanQuery.plan_id == plan_id)
+                        .where(PlanQuery.plan_id == plan_id)  # Still use original plan_id for data retrieval
                         .where(PlacesQuery.query_type == query_type)
                         .where(PlacesQuery.query == query_value)
                     )
@@ -732,7 +724,13 @@ async def update_plan(
                         for place_dict in result.places: # type: ignore
                             places.append(PlaceResult.from_dict(place_dict))
 
-                day_name = plan.travel_date.strftime('%A')
+                # Link existing places to new plan
+                for place_result in places:
+                    from app.places import upsert_place, link_place_to_plan
+                    upsert_place(session, place_result)
+                    link_place_to_plan(session, new_plan.id, place_result.id)
+
+                day_name = original_plan.travel_date.strftime('%A')
                 count = 0
                 processed_data = {}
                 seen_places = set()  # Track place names we've already seen
@@ -742,63 +740,66 @@ async def update_plan(
                 unique_places = []
                 for place in filtered_places:
                     place_name = place.get("name")
-                    if place_name and place_name not in seen_places and (place.get("rating") or 0) >= plan.rating:
+                    if place_name and place_name not in seen_places and (place.get("rating") or 0) >= original_plan.rating:
                         unique_places.append(place)
                         seen_places.add(place_name)
                         count += 1
                 
                 processed_data = unique_places
 
-                updated_travel_plan = {}
-                excluded_places = []
-                if isinstance(travel_plan, dict):
-                    for key in travel_plan:
-                        print("Making plan for", key)
-                        plan_per_day = await update_plan_for_one_day(plan.city, plan.country, travel_plan, plan.travel_date, day_name, message, processed_data, exclude_places=", ".join(excluded_places))
-                        for place in plan_per_day.get("itinerary", {}):
-                            excluded_places.append(place.get("name", ""))
-                        updated_travel_plan[key] = plan_per_day
-                    plan.travel_plan = updated_travel_plan
-                    session.add(plan)
-                    session.commit()
+            updated_travel_plan = {}
+            excluded_places = []
+            if isinstance(travel_plan, dict):
+                for key in travel_plan:
+                    print("Making plan for", key)
+                    plan_per_day = await update_plan_for_one_day(original_plan.city, original_plan.country, travel_plan, original_plan.travel_date, day_name, message, processed_data, exclude_places=", ".join(excluded_places))
+                    for place in plan_per_day.get("itinerary", {}):
+                        excluded_places.append(place.get("name", ""))
+                    updated_travel_plan[key] = plan_per_day
+            else:
+                print("travel_plan is not a dictionary")
 
-                    # NEW: Get places from database and enrich the travel plan
-                    plan_places = get_places_for_plan(session, plan.id)
-                    
-                    # Create lookup dictionary for fast matching
-                    place_lookup = {}
-                    for place in plan_places:
-                        place_lookup[place.name] = {
-                            "location": {"latitude": place.latitude, "longitude": place.longitude},
-                            "photos": place.photos or [],
-                            "rating": place.rating,
-                            "address": place.address,
-                            "opening_hours": place.opening_hours,
-                            "types": place.types or []
-                        }
+        # Common logic for saving and enriching the travel plan
+        new_plan.travel_plan = updated_travel_plan
+        session.add(new_plan)
+        session.commit()
 
-                    # Update each place in the travel plan
-                    for _, day_data in updated_travel_plan.items():
-                        itinerary = day_data.get("itinerary", [])
-                        for place in itinerary:
-                            name = place.get("name")
-                            matched = place_lookup.get(name)
+        # NEW: Get places from database and enrich the travel plan
+        plan_places = get_places_for_plan(session, new_plan.id)
+        
+        # Create lookup dictionary for fast matching
+        place_lookup = {}
+        for place in plan_places:
+            place_lookup[place.name] = {
+                "location": {"latitude": place.latitude, "longitude": place.longitude},
+                "photos": place.photos or [],
+                "rating": place.rating,
+                "address": place.address,
+                "opening_hours": place.opening_hours,
+                "types": place.types or []
+            }
 
-                            if matched:
-                                place["location"] = matched["location"]
-                                place["photos"] = matched["photos"]
-                                place["rating"] = matched["rating"]
-                                place["address"] = matched["address"]
-                                place["opening_hours"] = matched["opening_hours"]
-                                place["types"] = matched["types"]
+        # Update each place in the travel plan
+        for _, day_data in updated_travel_plan.items():
+            itinerary = day_data.get("itinerary", [])
+            for place in itinerary:
+                name = place.get("name")
+                matched = place_lookup.get(name)
 
-                else:
-                    print("travel_plan is not a dictionary")
-                return {
-                    "travel_plan_id": plan.id,
-                    "travel_plan": updated_travel_plan,
-                    "new_places": processed_data
-                }
+                if matched:
+                    place["location"] = matched["location"]
+                    place["photos"] = matched["photos"]
+                    place["rating"] = matched["rating"]
+                    place["address"] = matched["address"]
+                    place["opening_hours"] = matched["opening_hours"]
+                    place["types"] = matched["types"]
+
+        return {
+            "travel_plan_id": new_plan.id,
+            "original_plan_id": original_plan.id,
+            "travel_plan": updated_travel_plan,
+            "new_places": processed_data if 'processed_data' in locals() else {}
+        }
 
 
     return HTTPException(500, f"Error: {response}")
