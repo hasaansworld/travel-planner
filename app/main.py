@@ -51,6 +51,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+def calculate_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calculate distance between two points in meters using geodesic distance
+    """
+    try:
+        distance = geodesic((lat1, lon1), (lat2, lon2)).meters
+        return round(distance, 2)
+    except Exception as e:
+        logger.error(f"Error calculating distance: {e}")
+        return 0.0
+
 async def get_plan_for_one_day(
     city: str,
     country: str,
@@ -322,7 +333,7 @@ async def get_plan(
                 "types": place.types or []
             }
 
-        # Update each place in the travel plan
+        # Update each place in the travel plan with location data and distance
         for _, day_data in travel_plan.items():
             itinerary = day_data.get("itinerary", [])
             for place in itinerary:
@@ -336,6 +347,17 @@ async def get_plan(
                     place["address"] = matched["address"]
                     place["opening_hours"] = matched["opening_hours"]
                     place["types"] = matched["types"]
+                    
+                    # Calculate distance from user location to this place
+                    place_lat = matched["location"].get("latitude")
+                    place_lon = matched["location"].get("longitude")
+                    if place_lat is not None and place_lon is not None:
+                        distance = calculate_distance_meters(lat, lon, place_lat, place_lon)
+                        place["distance"] = distance
+                    else:
+                        place["distance"] = None
+                else:
+                    place["distance"] = None
 
         return {
             "travel_plan_id": plan.id,
@@ -779,7 +801,7 @@ async def update_plan(
                 "types": place.types or []
             }
 
-        # Update each place in the travel plan
+        # Update each place in the travel plan with location data and distance
         for _, day_data in updated_travel_plan.items():
             itinerary = day_data.get("itinerary", [])
             for place in itinerary:
@@ -793,6 +815,17 @@ async def update_plan(
                     place["address"] = matched["address"]
                     place["opening_hours"] = matched["opening_hours"]
                     place["types"] = matched["types"]
+                    
+                    # Calculate distance from user location to this place
+                    place_lat = matched["location"].get("latitude")
+                    place_lon = matched["location"].get("longitude")
+                    if place_lat is not None and place_lon is not None:
+                        distance = calculate_distance_meters(original_plan.lat, original_plan.long, place_lat, place_lon)
+                        place["distance"] = distance
+                    else:
+                        place["distance"] = None
+                else:
+                    place["distance"] = None
 
         return {
             "travel_plan_id": new_plan.id,
