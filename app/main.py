@@ -1058,82 +1058,81 @@ async def get_place_details(
         logger.error(f"Unexpected error in place details: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+@app.get("/create-user")
+def create_user(
+   email: str = Query(..., description="User email"),
+   name: str = Query(..., description="User name"),
+   session: Session = Depends(get_session)
+):
+   try:
+       # Try to find existing user by email
+       statement = select(User).where(User.email == email)
+       existing_user = session.exec(statement).first()
+       
+       if existing_user:
+           return {"user_id": existing_user.user_id}
+       
+       # Create new user
+       new_user = User(
+           name=name,
+           email=email,
+           created_at=datetime.utcnow(),
+           updated_at=datetime.utcnow()
+       )
+       
+       session.add(new_user)
+       session.commit()
+       session.refresh(new_user)
+       
+       return {"user_id": new_user.user_id,}
+       
+   except Exception as e:
+       logger.error(f"Error creating/fetching user: {e}")
+       raise HTTPException(status_code=500, detail="Failed to create or fetch user")
 
-def verify_google_token(token: str, client_id: Optional[str] = None):
-    """
-    Verify Google ID token using Google's tokeninfo endpoint
-    """
-    try:
-        # Use Google's tokeninfo endpoint to verify the token
-        response = requests.get(
-            f"https://oauth2.googleapis.com/tokeninfo?id_token={token}",
-            timeout=10
+@app.get("/user-plans")
+async def get_user_plans(
+   user_id: int = Query(..., description="User ID"),
+   session: Session = Depends(get_session)
+):
+   """
+   Get all original travel plans for a user (excludes updated plans)
+   """
+   try:
+       # Query for original plans only (where update_for is null)
+       query = (
+            select(TravelPlan)
+            .where(TravelPlan.user_id == user_id)
+            .where(TravelPlan.update_for == None)
+            .order_by(desc(TravelPlan.created_at))
         )
-        
-        if response.status_code != 200:
-            raise ValueError("Invalid token")
-            
-        token_info = response.json()
-        
-        # Verify the audience (client ID) if GOOGLE_CLIENT_ID is set
-        if client_id and token_info.get('aud') != client_id:
-            raise ValueError("Invalid audience")
-            
-        return token_info
-        
-    except requests.RequestException as e:
-        raise ValueError(f"Network error during token verification: {str(e)}")
-    except Exception as e:
-        raise ValueError(f"Token verification failed: {str(e)}")
-
-
-def get_or_create_user(session: Session, email: str, name: str) -> "User":
-
-    # Try to find existing user by email
-    statement = select(User).where(User.email == email)
-    existing_user = session.exec(statement).first()
-    
-    if existing_user:
-        return existing_user
-    
-    # Create new user
-    new_user = User(
-        name=name,
-        email=email,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
-    )
-    
-    session.add(new_user)
-    session.commit()
-    session.refresh(new_user)
-    
-    return new_user
-
-@app.post("/auth/google")
-async def login_with_google(token_request, session: Session = Depends(get_session)):
-    try:
-        GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-
-        # Verify the Google ID token
-        token_info = verify_google_token(token_request.token, client_id=GOOGLE_CLIENT_ID)
-        
-        # Extract user information from Google
-        google_email = token_info['email']
-        google_name = token_info['name']
-        
-        # Get or create user in database
-        user = get_or_create_user(session, google_email, google_name)
-        
-
-        return {"user_id": user.user_id, "name": user.name, "email": user.email}
-        
-    except ValueError as e:
-        # Invalid token
-        raise HTTPException(status_code=401, detail=f"Invalid Google token: {str(e)}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Authentication failed")
-
+       
+       plans = session.exec(query).all()
+       
+       # Format response
+       plans_data = []
+       for plan in plans:
+           plans_data.append({
+               "travel_plan_id": plan.id,
+               "city": plan.city,
+               "country": plan.country,
+               "intent": plan.intent,
+               "travel_date": plan.travel_date.isoformat() if plan.travel_date else None,
+               "number_of_days": plan.number_of_days,
+               "rating": plan.rating,
+               "radius_km": plan.radius_km,
+               "created_at": plan.created_at.isoformat() if plan.created_at else None,
+               "model": plan.model
+           })
+       
+       return {
+           "plans": plans_data,
+           "total_count": len(plans_data)
+       }
+       
+   except Exception as e:
+       logger.error(f"Error fetching user plans: {e}")
+       raise HTTPException(status_code=500, detail="Failed to fetch user plans")
 
 if __name__ == "__main__":
     import uvicorn
