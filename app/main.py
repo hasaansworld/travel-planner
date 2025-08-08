@@ -1233,7 +1233,7 @@ async def get_plan_by_id(
                            place_lon = matched["location"].get("longitude")
                            if place_lat is not None and place_lon is not None:
                                distance = calculate_distance_meters(plan_obj.lat, plan_obj.long, place_lat, place_lon)
-                               place["distance"] = int(distance * 1000)  # Convert to meters
+                               place["distance"] = distance
                            else:
                                place["distance"] = None
                        else:
