@@ -530,7 +530,46 @@ async def update_plan(
                 new_intent = original_plan.intent
                 if intent:
                     new_intent += f", {intent}"
-                return await get_plan(original_plan.user_id, city_id=original_plan.city_id, lat=original_plan.lat, lon=original_plan.long, radius_km=data.get("radius_km", original_plan.radius_km), rating=data.get("rating", original_plan.rating), intent=new_intent, start_date=original_plan.travel_date, number_of_days=data.get("number_of_days", original_plan.number_of_days), model=model, api_key=api_key, session=session)    
+                
+                new_plan_response = await get_plan(
+                    original_plan.user_id, 
+                    city_id=original_plan.city_id, 
+                    lat=original_plan.lat, 
+                    lon=original_plan.long, 
+                    radius_km=data.get("radius_km", original_plan.radius_km), 
+                    rating=data.get("rating", original_plan.rating), 
+                    intent=new_intent, 
+                    start_date=original_plan.travel_date, 
+                    number_of_days=data.get("number_of_days", original_plan.number_of_days), 
+                    model=model, 
+                    api_key=api_key, 
+                    session=session
+                )
+                
+                # Get the new plan ID from the response
+                new_plan_id = new_plan_response.get("travel_plan_id")
+                
+                # Update the new plan's update_for column to reference the original plan
+                if new_plan_id:
+                    # Find the original plan ID (if current plan is already an update)
+                    original_plan_id = original_plan.update_for if original_plan.update_for else original_plan.id
+                    
+                    # Update the new plan
+                    update_query = (
+                        select(TravelPlan)
+                        .where(TravelPlan.id == new_plan_id)
+                    )
+                    new_plan = session.exec(update_query).first()
+                    
+                    if new_plan:
+                        new_plan.update_for = original_plan_id
+                        session.add(new_plan)
+                        session.commit()
+                        
+                        # Update the response to include the original plan reference
+                        new_plan_response["original_plan_id"] = original_plan_id
+                
+                return new_plan_response 
         else:
             print("Failed to get response from LLM for initial params check")
 
