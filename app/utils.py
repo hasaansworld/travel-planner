@@ -13,9 +13,29 @@ def generate_llm_response(messages, model_name, api_key="", **kwargs):
     max_tokens = kwargs.get('max_tokens', 1000)
     temperature = kwargs.get('temperature', 0.7)
     top_p = kwargs.get('top_p', 1.0)
-    print(f"generate_llm_response called from: {traceback.extract_stack()[-2].line}")
-    if api_key:
-        print(f"Making {model_name} api call with key: {api_key}")
+    # Get call stack info
+    stack = traceback.extract_stack()
+    caller = stack[-2]  # The function that called this one
+    
+    print(f"\n=== generate_llm_response DEBUG ===")
+    print(f"Called from: {caller.filename}:{caller.lineno}")
+    print(f"Called from function: {caller.name}")
+    print(f"Call line: {caller.line}")
+    print(f"api_key type: {type(api_key)}")
+    print(f"api_key value: {repr(api_key)}")
+    print(f"api_key bool: {bool(api_key)}")
+    print(f"api_key length: {len(str(api_key))}")
+    
+    # Check if it's a Pydantic field
+    if hasattr(api_key, 'annotation'):
+        print(f"⚠️  API key is a Pydantic field!")
+        print(f"Field default: {getattr(api_key, 'default', 'NO_DEFAULT')}")
+        print(f"Field annotation: {getattr(api_key, 'annotation', 'NO_ANNOTATION')}")
+    
+    # Check kwargs for any api_key
+    if 'api_key' in kwargs:
+        print(f"⚠️  DUPLICATE: api_key also in kwargs: {repr(kwargs['api_key'])}")
+    
     
     if model_name == "deepseek":
         model_name = "deepseek-r1-distill-llama-70b"
