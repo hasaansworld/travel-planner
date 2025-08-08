@@ -516,6 +516,9 @@ async def update_plan(
         ]
 
         print("Step 0: Checking if initial params changed")
+        print(f"Type check - api_key is: {type(api_key)}")
+        print(f"Is string: {isinstance(api_key, str)}")
+        print(f"Actual value: {repr(api_key)}")
         response = generate_llm_response(
             messages=messages,
             model_name="llama",
