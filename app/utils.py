@@ -7,13 +7,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def generate_llm_response(messages, model_name, **kwargs):
+def generate_llm_response(messages, model_name, api_key="", **kwargs):
     # Set default parameters
     max_tokens = kwargs.get('max_tokens', 1000)
     temperature = kwargs.get('temperature', 0.7)
     top_p = kwargs.get('top_p', 1.0)
 
-    api_key = kwargs.get('api_key', "")
     if api_key:
         print(f"Making {model_name} api call with key: {api_key}")
     
