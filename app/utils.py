@@ -14,6 +14,8 @@ def generate_llm_response(messages, model_name, **kwargs):
     top_p = kwargs.get('top_p', 1.0)
 
     api_key = kwargs.get('api_key', "")
+    if api_key:
+        print(f"Making {model_name} api call with key: {api_key}")
     
     if model_name == "deepseek":
         model_name = "deepseek-r1-distill-llama-70b"
