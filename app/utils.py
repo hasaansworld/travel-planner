@@ -1,3 +1,4 @@
+import traceback
 import openai
 from groq import Groq
 import os
@@ -12,7 +13,7 @@ def generate_llm_response(messages, model_name, api_key="", **kwargs):
     max_tokens = kwargs.get('max_tokens', 1000)
     temperature = kwargs.get('temperature', 0.7)
     top_p = kwargs.get('top_p', 1.0)
-
+    print(f"generate_llm_response called from: {traceback.extract_stack()[-2].line}")
     if api_key:
         print(f"Making {model_name} api call with key: {api_key}")
     
