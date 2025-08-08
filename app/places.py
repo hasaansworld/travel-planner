@@ -404,7 +404,7 @@ def get_llm_queries(
     You must never suggest two text queries that are similar to each other.
     Try to use nearby search API as much as possible, use text search only when a category is not available for nearby search.
     Try to match the text queries with user's intent.
-    {"## You must always make at least 2 queries for places to eat like restaurants and cafes." if exclude_queries else ""}
+    {"## You must always make at least 2 queries for places to eat like restaurants and cafes." if not exclude_queries else ""}
     Your output should be a JSON object with the following structure:
     {{
         "queries": [
