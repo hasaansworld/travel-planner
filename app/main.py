@@ -90,7 +90,7 @@ async def get_plan_for_one_day(
     - ## Always include a specific place from the places data, don't recommend some generic recommendation like "a local restaurant" or "a local cafe"
     - ## Always recommend places from places data provided, NEVER recommend places from your own
     - **Respect user's food preferences like trying local food or some particular cuisine, don't recommend any other cuisine if user explitly mentioned one**
-    - **Ensure at least 2 meals per day**
+    - **Ensure at least 2 meals per day but ONLY SUGGEST PLACES FROM DATA GIVEN**
     - **Never recommend places user asks to exclude**
     {"- Always recommend places from only one cluster." if clustering else ""}
     
@@ -405,7 +405,7 @@ async def update_plan_for_one_day(
     - ## Always include a specific place from the places data, don't recommend some generic recommendation like "a local restaurant" or "a local cafe"
     - ## Always recommend places from places data provided, NEVER recommend places from your own
     - Try to incorporate the new data according to the user message. Change original plan as per user requirement.
-    - **Ensure at least 2 meals per day**
+    - **Ensure at least 2 meals per day but ONLY SUGGEST PLACES FROM DATA GIVEN**
     - **Never recommend places user asks to exclude**
     {"- Always recommend places from only one cluster." if clustering else ""}
     
