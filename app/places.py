@@ -391,7 +391,7 @@ def get_llm_queries(
     """Get search queries from LLM based on user preferences"""
     
     # Determine number of queries based on whether we're excluding some
-    num_queries = "1-3" if exclude_queries else "5-7"
+    num_queries = "1-3" if exclude_queries else "6-8"
     
     system_prompt = f"""
     You are a helpful assistant that creates travel plans based on user preferences and location.
@@ -404,6 +404,7 @@ def get_llm_queries(
     You must never suggest two text queries that are similar to each other.
     Try to use nearby search API as much as possible, use text search only when a category is not available for nearby search.
     Try to match the text queries with user's intent.
+    {"## You must always make at least 2 queries for places to eat like restaurants and cafes." if exclude_queries else ""}
     Your output should be a JSON object with the following structure:
     {{
         "queries": [
