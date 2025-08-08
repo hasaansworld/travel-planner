@@ -12,6 +12,8 @@ def generate_llm_response(messages, model_name, **kwargs):
     max_tokens = kwargs.get('max_tokens', 1000)
     temperature = kwargs.get('temperature', 0.7)
     top_p = kwargs.get('top_p', 1.0)
+
+    api_key = kwargs.get('api_key', "")
     
     if model_name == "deepseek":
         model_name = "deepseek-r1-distill-llama-70b"
@@ -21,7 +23,8 @@ def generate_llm_response(messages, model_name, **kwargs):
     try:
         # Route to OpenAI if model contains 'gpt'
         if 'gpt' in model_name.lower():
-            api_key = os.getenv('OPENAI_API_KEY')
+            if not api_key:
+                api_key = os.getenv('OPENAI_API_KEY')
             if not api_key:
                 raise ValueError("OPENAI_API_KEY environment variable is required for GPT models")
             
@@ -29,7 +32,8 @@ def generate_llm_response(messages, model_name, **kwargs):
         
         # Route to Groq for all other models
         else:
-            api_key = os.getenv('GROQ_API_KEY')
+            if not api_key:
+                api_key = os.getenv('GROQ_API_KEY')
             if not api_key:
                 raise ValueError("GROQ_API_KEY environment variable is required for non-GPT models")
             

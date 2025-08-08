@@ -71,7 +71,8 @@ async def get_plan_for_one_day(
     user_activity: str,
     places_data: Any,
     exclude_places: str,
-    clustering: bool = False
+    clustering: bool = False,
+    api_key: str = "",
 ):
     
     system_prompt = f"""You are a travel planner assistant. 
@@ -135,6 +136,7 @@ async def get_plan_for_one_day(
         messages=messages,
         model_name="llama",
         temperature=0,
+        api_key=api_key,
     )
 
     travel_plan = {}
@@ -155,6 +157,7 @@ async def get_plan(
     start_date: datetime = Query(datetime.now(), description="Travel plan start date"),
     number_of_days: int = Query(1, description="Number of days for the travel plan", ge=1, le=5),
     model: str = Query("llama", description="LLM model to use for generating the plan"),
+    api_key: str = Query("", description="Provide your own api key for LLMs"),
     session: Session = Depends(get_session)
 ):
     try:
@@ -208,6 +211,7 @@ async def get_plan(
                 messages=messages,
                 model_name="llama",
                 temperature=0,
+                api_key=api_key
             )
 
             if response:
@@ -248,7 +252,8 @@ async def get_plan(
             country=country,
             city=city,
             intent=intent,
-            model=model
+            model=model,
+            api_key=api_key,
         )
         
         if not queries:
@@ -379,7 +384,7 @@ async def get_plan(
         raise
     except Exception as e:
         logger.error(f"Unexpected error in get_plan: {e}")
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 async def update_plan_for_one_day(
@@ -392,6 +397,7 @@ async def update_plan_for_one_day(
     places_data: Any,
     exclude_places: str = "",
     clustering: bool = False,
+    api_key: str = "",
 ):
     
     system_prompt = f"""You are a travel planner assistant. 
@@ -450,6 +456,7 @@ async def update_plan_for_one_day(
         messages=messages,
         model_name="llama",
         temperature=0,
+        api_key=api_key,
     )
 
     travel_plan = {}
@@ -465,6 +472,7 @@ async def update_plan(
     plan_id: int = Query(description="Plan ID"),
     message: str = Query(description="Message from user"),
     model: str = Query("llama", description="LLM model to use for generating the plan"),
+    api_key: str = Query("", description="Provide your own api key for LLMs"),
     session: Session = Depends(get_session)
 ):
     
@@ -510,6 +518,7 @@ async def update_plan(
         messages=messages,
         model_name="llama",
         temperature=0,
+        api_key=api_key,
     )
 
     if response:
@@ -561,6 +570,7 @@ async def update_plan(
         messages=messages,
         model_name="llama",
         temperature=0,
+        api_key=api_key,
     )
 
     if response:
@@ -627,7 +637,8 @@ async def update_plan(
                 city=original_plan.city,
                 intent=message,
                 model=model,
-                exclude_queries=queries
+                api_key=api_key,
+                exclude_queries=queries,
             )
 
             if not queries:
@@ -721,6 +732,7 @@ async def update_plan(
                 messages=messages,
                 model_name="llama",
                 temperature=0,
+                api_key=api_key,
             )
 
             places = []

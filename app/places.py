@@ -386,7 +386,8 @@ def get_llm_queries(
     city: str = "Oulu",
     intent: str = "travel, sight seeing and trying local food",
     exclude_queries: str = "",
-    model: str = "llama"
+    model: str = "llama",
+    api_key: str = "",
 ) -> List[Dict]:
     """Get search queries from LLM based on user preferences"""
     
@@ -467,6 +468,7 @@ def get_llm_queries(
         messages=messages,
         model_name=model,
         temperature=0,
+        api_key=api_key,
     )
     
     try:
