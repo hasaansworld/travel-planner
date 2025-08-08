@@ -477,381 +477,387 @@ async def update_plan(
     api_key: str = Query("", description="Provide your own api key for LLMs"),
     session: Session = Depends(get_session)
 ):
-    
-    query = (
-        select(TravelPlan)
-        .where(TravelPlan.user_id == user_id)
-        .where(TravelPlan.id == plan_id)
-    )
-
-    original_plan = session.exec(query).first()
-    
-    if not original_plan:
-        raise HTTPException(404, "Travel plan not found")
-    
-    travel_plan = original_plan.travel_plan
-
-
-    system_prompt = """
-    You are a decision making system. You have to decide if the initial params of a travel plan need to be changed based on revision request by the user.
-    You will be provided with initial params of the travel plan and new message from the user. The initial params will be in the format:
-    { "radius_km": 2, "rating": 3.2, "number_of_days": 2}
-    radius_km is between 0 and 50 and rating is between 0 and 5 and number of days is between 1 and 5. Do not output values outside these ranges.
-    you have to output a boolean variable "params_changed" if the params need to be changed. You also need to provide any additional user intent in the "intent" key.
-    Your output should be in the following json format:
-    { "params_changed": true, "radius_km": 3, "rating": 4.0, "number_of_days": 3, "intent": "any new message by the user other than the initial params" }
-    """
-    params_dict = {
-        "radius_km": original_plan.radius_km,
-        "rating": original_plan.rating,
-        "number_of_days": original_plan.number_of_days
-    }
-    user_message = f"""
-    Initial Params: {params_dict}
-    Revision message from user: {message}
-    """
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message}
-    ]
-
-    print("Step 0: Checking if initial params changed")
-    response = generate_llm_response(
-        messages=messages,
-        model_name="llama",
-        temperature=0,
-        api_key=api_key,
-    )
-
-    if response:
-        data = json.loads(response) or {}
-        params_changed = data.get("params_changed", False)
-        if params_changed:
-            intent = data.get("intent", "")
-            new_intent = original_plan.intent
-            if intent:
-                new_intent += f", {intent}"
-            return await get_plan(original_plan.user_id, city_id=original_plan.city_id, lat=original_plan.lat, lon=original_plan.long, radius_km=data.get("radius_km", original_plan.radius_km), rating=data.get("rating", original_plan.rating), intent=new_intent, start_date=original_plan.travel_date, number_of_days=data.get("number_of_days", original_plan.number_of_days), model=model, session=session)    
-    else:
-        print("Failed to get response from LLM for initial params check")
-
-    statement = (
-        select(PlacesQuery.query_type, PlacesQuery.query)
-        .select_from(PlacesQuery, PlanQuery)
-        .where(
-            PlacesQuery.id == PlanQuery.query_id,
-            PlanQuery.plan_id == plan_id
+    try:
+        query = (
+            select(TravelPlan)
+            .where(TravelPlan.user_id == user_id)
+            .where(TravelPlan.id == plan_id)
         )
-    )
-    
-    queries = session.exec(statement).all()
-    query_texts = []
-    for query in queries:
-        query_texts.append(f"{query[0]}: {query[1]}")
-    queries = ", ".join(query_texts)
 
-    print("Existing queries", queries)
-
-    system_prompt = """
-    You are a decision making system. You have to decide if there is a need to fetch new data for a travel plan based on revision request by the user.
-    You will be provided with existing queries to the google places api and new message from the user. You have to respond in the following json format:
-    { "fetch_data": "true" } or { "fetch_data": "false" }
-    Make your decision based on the fact that if the user's revision request might need data outside existing queries or not.
-    """
-    user_message = f"""
-    Existing queries: {queries}
-    Revision message from user: {message}
-    """
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message}
-    ]
-
-    print("Step 1: Checking if need to fetch data again")
-    response = generate_llm_response(
-        messages=messages,
-        model_name="llama",
-        temperature=0,
-        api_key=api_key,
-    )
-
-    if response:
-        fetch_data = json.loads(response) or {"fetch_data": False}
-        fetch_data = fetch_data["fetch_data"]
+        original_plan = session.exec(query).first()
         
-        # Create new travel plan record (common for both paths)
-        new_plan = TravelPlan(
-            user_id=original_plan.user_id,
-            city_id=original_plan.city_id,
-            update_for=original_plan.id,  # Reference to original plan
-            lat=original_plan.lat,
-            long=original_plan.long,
-            radius_km=original_plan.radius_km,
-            rating=original_plan.rating,
-            intent=f"{original_plan.intent}, {message}",  # Include update message in intent
-            model=model,
-            city=original_plan.city,
-            country=original_plan.country,
-            travel_date=original_plan.travel_date,
-            number_of_days=original_plan.number_of_days,
-            created_at=datetime.now()
+        if not original_plan:
+            raise HTTPException(404, "Travel plan not found")
+        
+        travel_plan = original_plan.travel_plan
+
+
+        system_prompt = """
+        You are a decision making system. You have to decide if the initial params of a travel plan need to be changed based on revision request by the user.
+        You will be provided with initial params of the travel plan and new message from the user. The initial params will be in the format:
+        { "radius_km": 2, "rating": 3.2, "number_of_days": 2}
+        radius_km is between 0 and 50 and rating is between 0 and 5 and number of days is between 1 and 5. Do not output values outside these ranges.
+        you have to output a boolean variable "params_changed" if the params need to be changed. You also need to provide any additional user intent in the "intent" key.
+        Your output should be in the following json format:
+        { "params_changed": true, "radius_km": 3, "rating": 4.0, "number_of_days": 3, "intent": "any new message by the user other than the initial params" }
+        """
+        params_dict = {
+            "radius_km": original_plan.radius_km,
+            "rating": original_plan.rating,
+            "number_of_days": original_plan.number_of_days
+        }
+        user_message = f"""
+        Initial Params: {params_dict}
+        Revision message from user: {message}
+        """
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ]
+
+        print("Step 0: Checking if initial params changed")
+        response = generate_llm_response(
+            messages=messages,
+            model_name="llama",
+            temperature=0,
+            api_key=api_key,
         )
-        session.add(new_plan)
-        session.commit()
-        session.refresh(new_plan)
 
-        # Copy all existing places from original plan to new plan (common for both paths)
-        original_plan_places = get_places_for_plan(session, original_plan.id)
-        for place in original_plan_places:
-            from app.places import link_place_to_plan
-            link_place_to_plan(session, new_plan.id, place.place_id)
-        session.commit()
-        
-        if fetch_data == "true":
-            print("Need to fetch new data")
-
-            # Get user activity data
-            if user_id <= 125000:
-                query = (
-                    select(Category.category_name)
-                    .select_from(UserFrequency)
-                    .join(Category)
-                    .where(UserFrequency.poi_category_id == Category.category_id)
-                    .where(UserFrequency.user_id == user_id)
-                    .group_by(Category.category_name)
-                    .order_by(desc(func.sum(UserFrequency.count)))
-                )
-
-                # Execute query
-                results = session.exec(query).all()
-            else:
-                unique_place_types_query = select(distinct(NewUserVisit.place_type)).where(
-                    NewUserVisit.user_id == user_id
-                )
-                results = session.exec(unique_place_types_query).all()
-
-            user_activity = ", ".join(results)
-
-            print("Step 2: Getting search queries from LLM...")
-            queries = get_llm_queries(
-                user_activity=user_activity,
-                country=original_plan.country,
-                city=original_plan.city,
-                intent=message,
-                model=model,
-                api_key=api_key,
-                exclude_queries=queries,
-            )
-
-            if not queries:
-                return HTTPException(500, "Failed to get queries from LLM")
-            
-            print(f"Generated {len(queries)} queries:")
-            for i, query in enumerate(queries, 1):
-                print(f"  {i}. {query}")
-
-            # Step 2: Execute search queries with new plan ID
-            print("\nStep 2: Executing search queries...")
-
-            location = Location(latitude=original_plan.lat, longitude=original_plan.long)
-            results = execute_search_queries(
-                queries=queries,
-                plan_id=new_plan.id,  # Use new plan ID
-                location=location,
-                session=session,
-                city=original_plan.city,
-                country=original_plan.country,
-                radius_km=int(original_plan.radius_km),
-                max_results_per_query=20
-            )
-
-            should_use_clustering = original_plan.number_of_days > 1 and original_plan.radius_km > 2
-            if should_use_clustering:
-                clustered_places = cluster_places_by_location(results, original_plan.number_of_days)
-                results = clustered_places
-
-            day_name = original_plan.travel_date.strftime('%A')
-            count = 0
-            processed_data = {}
-            seen_places = set()  # Track place names we've already seen
-            
-            for search_category, places in results.items():
-                filtered_places = filter_and_sort_places(places)
-                
-                # Remove duplicates based on place name
-                unique_places = []
-                for place in filtered_places:
-                    place_name = place.get("name")
-                    if place_name and place_name not in seen_places and (place.get("rating") or 0) >= original_plan.rating:
-                        unique_places.append(place)
-                        seen_places.add(place_name)
-                        count += 1
-                
-                processed_data[search_category] = unique_places
-
-            places_data = json.dumps(processed_data, indent=2, ensure_ascii=False)
-            print("Processed data:", places_data)
-            print(f"Total unique places found: {count}")
-
-            updated_travel_plan = {}
-            excluded_places = []
-            if isinstance(travel_plan, dict):
-                for key in travel_plan:
-                    print("Making plan for", key)
-                    plan_per_day = await update_plan_for_one_day(original_plan.city, original_plan.country, travel_plan, original_plan.travel_date, day_name, message, places_data, ", ".join(excluded_places), clustering=should_use_clustering)
-                    for place in plan_per_day.get("itinerary", {}):
-                        excluded_places.append(place.get("name", ""))
-                    
-                    updated_travel_plan[key] = plan_per_day
-            else:
-                print("travel_plan is not a dictionary")
-                
+        if response:
+            data = json.loads(response) or {}
+            params_changed = data.get("params_changed", False)
+            if params_changed:
+                intent = data.get("intent", "")
+                new_intent = original_plan.intent
+                if intent:
+                    new_intent += f", {intent}"
+                return await get_plan(original_plan.user_id, city_id=original_plan.city_id, lat=original_plan.lat, lon=original_plan.long, radius_km=data.get("radius_km", original_plan.radius_km), rating=data.get("rating", original_plan.rating), intent=new_intent, start_date=original_plan.travel_date, number_of_days=data.get("number_of_days", original_plan.number_of_days), model=model, session=session)    
         else:
-            print("No need to fetch new data")
-            
-            system_prompt = """
-            You are a decision making system. You have to decide if there is a need to retrieve existing places data for a travel plan based on revision request by the user.
-            You will be provided with existing queries to the places API, a travel plan and new message from the user. 
-            You have to respond with the queries to fetch existing data if it is needed to update the travel plan.
-            You have to respond in the following json format:
-            {{ "queries": ["nearby: restaurant", "text": "local cuisine", ...]}}
-            Make your decision based on the fact that if the user's revision request might need places data or if it can be implemented without retrieving the data.
-            If there is no need to retrieve the data respond like this:
-            {{ "queries": [] }}
-            """
-            user_message = f"""
-            Existing queries: {queries}
-            Travel Plan: {json.dumps(travel_plan, indent=2)}
-            Revision message from user: {message}
-            """
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ]
+            print("Failed to get response from LLM for initial params check")
 
-            print("Checking if need to retrieve places data")
-            response = generate_llm_response(
-                messages=messages,
-                model_name="llama",
-                temperature=0,
-                api_key=api_key,
+        statement = (
+            select(PlacesQuery.query_type, PlacesQuery.query)
+            .select_from(PlacesQuery, PlanQuery)
+            .where(
+                PlacesQuery.id == PlanQuery.query_id,
+                PlanQuery.plan_id == plan_id
             )
-
-            places = []
-            if response:
-                retrieve_queries = json.loads(response)["queries"] or []
-                print("Retrieve queries", retrieve_queries)
-                for q in retrieve_queries:
-                    split = q.split(": ")
-                    query_type = split[0]
-                    query_value = split[1]
-
-                    print("Searching for", query_type, query_value)
-
-                    statement = (
-                        select(PlacesQuery.places, PlacesQuery.query_type, PlacesQuery.query)
-                        .join(PlanQuery)
-                        .where(PlacesQuery.id == PlanQuery.query_id)
-                        .where(PlanQuery.plan_id == plan_id)  # Still use original plan_id for data retrieval
-                        .where(PlacesQuery.query_type == query_type)
-                        .where(PlacesQuery.query == query_value)
-                    )
+        )
         
-                    result = session.exec(statement).first()
-                    if result:
-                        for place_dict in result.places: # type: ignore
-                            places.append(PlaceResult.from_dict(place_dict))
+        queries = session.exec(statement).all()
+        query_texts = []
+        for query in queries:
+            query_texts.append(f"{query[0]}: {query[1]}")
+        queries = ", ".join(query_texts)
 
-                # Link existing places to new plan
-                for place_result in places:
-                    from app.places import upsert_place, link_place_to_plan
-                    upsert_place(session, place_result)
-                    link_place_to_plan(session, new_plan.id, place_result.id)
+        print("Existing queries", queries)
+
+        system_prompt = """
+        You are a decision making system. You have to decide if there is a need to fetch new data for a travel plan based on revision request by the user.
+        You will be provided with existing queries to the google places api and new message from the user. You have to respond in the following json format:
+        { "fetch_data": "true" } or { "fetch_data": "false" }
+        Make your decision based on the fact that if the user's revision request might need data outside existing queries or not.
+        """
+        user_message = f"""
+        Existing queries: {queries}
+        Revision message from user: {message}
+        """
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ]
+
+        print("Step 1: Checking if need to fetch data again")
+        response = generate_llm_response(
+            messages=messages,
+            model_name="llama",
+            temperature=0,
+            api_key=api_key,
+        )
+
+        if response:
+            fetch_data = json.loads(response) or {"fetch_data": False}
+            fetch_data = fetch_data["fetch_data"]
+            
+            # Create new travel plan record (common for both paths)
+            new_plan = TravelPlan(
+                user_id=original_plan.user_id,
+                city_id=original_plan.city_id,
+                update_for=original_plan.id,  # Reference to original plan
+                lat=original_plan.lat,
+                long=original_plan.long,
+                radius_km=original_plan.radius_km,
+                rating=original_plan.rating,
+                intent=f"{original_plan.intent}, {message}",  # Include update message in intent
+                model=model,
+                city=original_plan.city,
+                country=original_plan.country,
+                travel_date=original_plan.travel_date,
+                number_of_days=original_plan.number_of_days,
+                created_at=datetime.now()
+            )
+            session.add(new_plan)
+            session.commit()
+            session.refresh(new_plan)
+
+            # Copy all existing places from original plan to new plan (common for both paths)
+            original_plan_places = get_places_for_plan(session, original_plan.id)
+            for place in original_plan_places:
+                from app.places import link_place_to_plan
+                link_place_to_plan(session, new_plan.id, place.place_id)
+            session.commit()
+            
+            if fetch_data == "true":
+                print("Need to fetch new data")
+
+                # Get user activity data
+                if user_id <= 125000:
+                    query = (
+                        select(Category.category_name)
+                        .select_from(UserFrequency)
+                        .join(Category)
+                        .where(UserFrequency.poi_category_id == Category.category_id)
+                        .where(UserFrequency.user_id == user_id)
+                        .group_by(Category.category_name)
+                        .order_by(desc(func.sum(UserFrequency.count)))
+                    )
+
+                    # Execute query
+                    results = session.exec(query).all()
+                else:
+                    unique_place_types_query = select(distinct(NewUserVisit.place_type)).where(
+                        NewUserVisit.user_id == user_id
+                    )
+                    results = session.exec(unique_place_types_query).all()
+
+                user_activity = ", ".join(results)
+
+                print("Step 2: Getting search queries from LLM...")
+                queries = get_llm_queries(
+                    user_activity=user_activity,
+                    country=original_plan.country,
+                    city=original_plan.city,
+                    intent=message,
+                    model=model,
+                    api_key=api_key,
+                    exclude_queries=queries,
+                )
+
+                if not queries:
+                    return HTTPException(500, "Failed to get queries from LLM")
+                
+                print(f"Generated {len(queries)} queries:")
+                for i, query in enumerate(queries, 1):
+                    print(f"  {i}. {query}")
+
+                # Step 2: Execute search queries with new plan ID
+                print("\nStep 2: Executing search queries...")
+
+                location = Location(latitude=original_plan.lat, longitude=original_plan.long)
+                results = execute_search_queries(
+                    queries=queries,
+                    plan_id=new_plan.id,  # Use new plan ID
+                    location=location,
+                    session=session,
+                    city=original_plan.city,
+                    country=original_plan.country,
+                    radius_km=int(original_plan.radius_km),
+                    max_results_per_query=20
+                )
+
+                should_use_clustering = original_plan.number_of_days > 1 and original_plan.radius_km > 2
+                if should_use_clustering:
+                    clustered_places = cluster_places_by_location(results, original_plan.number_of_days)
+                    results = clustered_places
 
                 day_name = original_plan.travel_date.strftime('%A')
                 count = 0
                 processed_data = {}
                 seen_places = set()  # Track place names we've already seen
-                filtered_places = filter_and_sort_places(places)
-            
-                # Remove duplicates based on place name
-                unique_places = []
-                for place in filtered_places:
-                    place_name = place.get("name")
-                    if place_name and place_name not in seen_places and (place.get("rating") or 0) >= original_plan.rating:
-                        unique_places.append(place)
-                        seen_places.add(place_name)
-                        count += 1
                 
-                processed_data = unique_places
-
-            updated_travel_plan = {}
-            excluded_places = []
-            if isinstance(travel_plan, dict):
-                for key in travel_plan:
-                    print("Making plan for", key)
-                    plan_per_day = await update_plan_for_one_day(original_plan.city, original_plan.country, travel_plan, original_plan.travel_date, day_name, message, processed_data, exclude_places=", ".join(excluded_places))
-                    for place in plan_per_day.get("itinerary", {}):
-                        excluded_places.append(place.get("name", ""))
-                    updated_travel_plan[key] = plan_per_day
-            else:
-                print("travel_plan is not a dictionary")
-
-        # Common logic for saving and enriching the travel plan
-        new_plan.travel_plan = updated_travel_plan
-        session.add(new_plan)
-        session.commit()
-
-        # NEW: Get places from database and enrich the travel plan
-        plan_places = get_places_for_plan(session, new_plan.id)
-        
-        # Create lookup dictionary for fast matching
-        place_lookup = {}
-        for place in plan_places:
-            place_lookup[place.name] = {
-                "location": {"latitude": place.latitude, "longitude": place.longitude},
-                "photos": place.photos or [],
-                "rating": place.rating,
-                "address": place.address,
-                "opening_hours": place.opening_hours,
-                "types": place.types or []
-            }
-
-        # Update each place in the travel plan with location data and distance
-        for _, day_data in updated_travel_plan.items():
-            itinerary = day_data.get("itinerary", [])
-            for place in itinerary:
-                name = place.get("name")
-                matched = place_lookup.get(name)
-
-                if matched:
-                    place["location"] = matched["location"]
-                    place["photos"] = matched["photos"]
-                    place["rating"] = matched["rating"]
-                    place["address"] = matched["address"]
-                    place["opening_hours"] = matched["opening_hours"]
-                    place["types"] = matched["types"]
+                for search_category, places in results.items():
+                    filtered_places = filter_and_sort_places(places)
                     
-                    # Calculate distance from user location to this place
-                    place_lat = matched["location"].get("latitude")
-                    place_lon = matched["location"].get("longitude")
-                    if place_lat is not None and place_lon is not None:
-                        distance = calculate_distance_meters(original_plan.lat, original_plan.long, place_lat, place_lon)
-                        place["distance"] = distance
+                    # Remove duplicates based on place name
+                    unique_places = []
+                    for place in filtered_places:
+                        place_name = place.get("name")
+                        if place_name and place_name not in seen_places and (place.get("rating") or 0) >= original_plan.rating:
+                            unique_places.append(place)
+                            seen_places.add(place_name)
+                            count += 1
+                    
+                    processed_data[search_category] = unique_places
+
+                places_data = json.dumps(processed_data, indent=2, ensure_ascii=False)
+                print("Processed data:", places_data)
+                print(f"Total unique places found: {count}")
+
+                updated_travel_plan = {}
+                excluded_places = []
+                if isinstance(travel_plan, dict):
+                    for key in travel_plan:
+                        print("Making plan for", key)
+                        plan_per_day = await update_plan_for_one_day(original_plan.city, original_plan.country, travel_plan, original_plan.travel_date, day_name, message, places_data, ", ".join(excluded_places), clustering=should_use_clustering)
+                        for place in plan_per_day.get("itinerary", {}):
+                            excluded_places.append(place.get("name", ""))
+                        
+                        updated_travel_plan[key] = plan_per_day
+                else:
+                    print("travel_plan is not a dictionary")
+                    
+            else:
+                print("No need to fetch new data")
+                
+                system_prompt = """
+                You are a decision making system. You have to decide if there is a need to retrieve existing places data for a travel plan based on revision request by the user.
+                You will be provided with existing queries to the places API, a travel plan and new message from the user. 
+                You have to respond with the queries to fetch existing data if it is needed to update the travel plan.
+                You have to respond in the following json format:
+                {{ "queries": ["nearby: restaurant", "text": "local cuisine", ...]}}
+                Make your decision based on the fact that if the user's revision request might need places data or if it can be implemented without retrieving the data.
+                If there is no need to retrieve the data respond like this:
+                {{ "queries": [] }}
+                """
+                user_message = f"""
+                Existing queries: {queries}
+                Travel Plan: {json.dumps(travel_plan, indent=2)}
+                Revision message from user: {message}
+                """
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ]
+
+                print("Checking if need to retrieve places data")
+                response = generate_llm_response(
+                    messages=messages,
+                    model_name="llama",
+                    temperature=0,
+                    api_key=api_key,
+                )
+
+                places = []
+                if response:
+                    retrieve_queries = json.loads(response)["queries"] or []
+                    print("Retrieve queries", retrieve_queries)
+                    for q in retrieve_queries:
+                        split = q.split(": ")
+                        query_type = split[0]
+                        query_value = split[1]
+
+                        print("Searching for", query_type, query_value)
+
+                        statement = (
+                            select(PlacesQuery.places, PlacesQuery.query_type, PlacesQuery.query)
+                            .join(PlanQuery)
+                            .where(PlacesQuery.id == PlanQuery.query_id)
+                            .where(PlanQuery.plan_id == plan_id)  # Still use original plan_id for data retrieval
+                            .where(PlacesQuery.query_type == query_type)
+                            .where(PlacesQuery.query == query_value)
+                        )
+            
+                        result = session.exec(statement).first()
+                        if result:
+                            for place_dict in result.places: # type: ignore
+                                places.append(PlaceResult.from_dict(place_dict))
+
+                    # Link existing places to new plan
+                    for place_result in places:
+                        from app.places import upsert_place, link_place_to_plan
+                        upsert_place(session, place_result)
+                        link_place_to_plan(session, new_plan.id, place_result.id)
+
+                    day_name = original_plan.travel_date.strftime('%A')
+                    count = 0
+                    processed_data = {}
+                    seen_places = set()  # Track place names we've already seen
+                    filtered_places = filter_and_sort_places(places)
+                
+                    # Remove duplicates based on place name
+                    unique_places = []
+                    for place in filtered_places:
+                        place_name = place.get("name")
+                        if place_name and place_name not in seen_places and (place.get("rating") or 0) >= original_plan.rating:
+                            unique_places.append(place)
+                            seen_places.add(place_name)
+                            count += 1
+                    
+                    processed_data = unique_places
+
+                updated_travel_plan = {}
+                excluded_places = []
+                if isinstance(travel_plan, dict):
+                    for key in travel_plan:
+                        print("Making plan for", key)
+                        plan_per_day = await update_plan_for_one_day(original_plan.city, original_plan.country, travel_plan, original_plan.travel_date, day_name, message, processed_data, exclude_places=", ".join(excluded_places))
+                        for place in plan_per_day.get("itinerary", {}):
+                            excluded_places.append(place.get("name", ""))
+                        updated_travel_plan[key] = plan_per_day
+                else:
+                    print("travel_plan is not a dictionary")
+
+            # Common logic for saving and enriching the travel plan
+            new_plan.travel_plan = updated_travel_plan
+            session.add(new_plan)
+            session.commit()
+
+            # NEW: Get places from database and enrich the travel plan
+            plan_places = get_places_for_plan(session, new_plan.id)
+            
+            # Create lookup dictionary for fast matching
+            place_lookup = {}
+            for place in plan_places:
+                place_lookup[place.name] = {
+                    "location": {"latitude": place.latitude, "longitude": place.longitude},
+                    "photos": place.photos or [],
+                    "rating": place.rating,
+                    "address": place.address,
+                    "opening_hours": place.opening_hours,
+                    "types": place.types or []
+                }
+
+            # Update each place in the travel plan with location data and distance
+            for _, day_data in updated_travel_plan.items():
+                itinerary = day_data.get("itinerary", [])
+                for place in itinerary:
+                    name = place.get("name")
+                    matched = place_lookup.get(name)
+
+                    if matched:
+                        place["location"] = matched["location"]
+                        place["photos"] = matched["photos"]
+                        place["rating"] = matched["rating"]
+                        place["address"] = matched["address"]
+                        place["opening_hours"] = matched["opening_hours"]
+                        place["types"] = matched["types"]
+                        
+                        # Calculate distance from user location to this place
+                        place_lat = matched["location"].get("latitude")
+                        place_lon = matched["location"].get("longitude")
+                        if place_lat is not None and place_lon is not None:
+                            distance = calculate_distance_meters(original_plan.lat, original_plan.long, place_lat, place_lon)
+                            place["distance"] = distance
+                        else:
+                            place["distance"] = None
                     else:
                         place["distance"] = None
-                else:
-                    place["distance"] = None
 
-        return {
-            "travel_plan_id": new_plan.id,
-            "original_plan_id": original_plan.id,
-            "travel_plan": updated_travel_plan,
-            "new_places": processed_data if 'processed_data' in locals() else {}
-        }
+            return {
+                "travel_plan_id": new_plan.id,
+                "original_plan_id": original_plan.id,
+                "travel_plan": updated_travel_plan,
+                "new_places": processed_data if 'processed_data' in locals() else {}
+            }
 
 
-    return HTTPException(500, f"Error: {response}")
+        return HTTPException(500, f"Error: {response}")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in get_plan: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 @app.get("/get-nearby-places")
