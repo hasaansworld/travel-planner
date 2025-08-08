@@ -1103,7 +1103,7 @@ async def get_user_plans(
        query = (
             select(TravelPlan)
             .where(TravelPlan.user_id == user_id)
-            .where(TravelPlan.update_for == None)
+            .where(TravelPlan.update_for.is_(None)) # type: ignore
             .order_by(desc(TravelPlan.created_at))
         )
        
