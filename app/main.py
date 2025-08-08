@@ -530,7 +530,7 @@ async def update_plan(
                 new_intent = original_plan.intent
                 if intent:
                     new_intent += f", {intent}"
-                return await get_plan(original_plan.user_id, city_id=original_plan.city_id, lat=original_plan.lat, lon=original_plan.long, radius_km=data.get("radius_km", original_plan.radius_km), rating=data.get("rating", original_plan.rating), intent=new_intent, start_date=original_plan.travel_date, number_of_days=data.get("number_of_days", original_plan.number_of_days), model=model, session=session)    
+                return await get_plan(original_plan.user_id, city_id=original_plan.city_id, lat=original_plan.lat, lon=original_plan.long, radius_km=data.get("radius_km", original_plan.radius_km), rating=data.get("rating", original_plan.rating), intent=new_intent, start_date=original_plan.travel_date, number_of_days=data.get("number_of_days", original_plan.number_of_days), model=model, api_key=api_key, session=session)    
         else:
             print("Failed to get response from LLM for initial params check")
 
