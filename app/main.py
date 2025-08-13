@@ -969,6 +969,7 @@ async def create_user_visit(
     name: str = Query("City Biljard", description="Place name"),
     place_type: str = Query("Sports Complex", description="Place type"),
     address: Optional[str] = Query("Ylioppilaantie 4c, 90130 Oulu, Finland", description="Place address"),
+    created_at: Optional[datetime] = Query(None, description="created at time"),
     session: Session = Depends(get_session)
 ):
     try:
@@ -979,7 +980,8 @@ async def create_user_visit(
             long=long,
             name=name,
             place_type=place_type,
-            address=address
+            address=address,
+            created_at=created_at if created_at is not None else datetime.utcnow()
         )
         
         # Add to session and commit
