@@ -15,7 +15,7 @@ import aiohttp
 import asyncio
 from urllib.parse import quote
 from dotenv import load_dotenv
-from sqlmodel import Session, asc, desc, distinct, func, select
+from sqlmodel import Session, asc, desc, distinct, func, select, text
 from app.clustering import cluster_places_by_location
 from app.database import create_db_and_tables, get_session
 from app.models import Category, NewUserVisit, PlacesQuery, PlanQuery, TravelPlan, User, UserFrequency, Place, PlanPlace
@@ -61,6 +61,85 @@ def calculate_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float
     except Exception as e:
         logger.error(f"Error calculating distance: {e}")
         return 0.0
+
+
+def get_user_activity(user_id, city_id, session):
+    if user_id <= 125000:
+        # Get all categories with counts per timeslot, then process in Python
+        query = (
+            select(
+                UserFrequency.time_slot,
+                Category.category_name,
+                func.sum(UserFrequency.count).label('total_count')
+            )
+            .join(Category)
+            .where(UserFrequency.poi_category_id == Category.category_id)
+            .where(UserFrequency.user_id == user_id)
+            .group_by(text("time_slot"), text("category_name"))
+            .order_by(text("time_slot"), desc(text("sum(count)")))
+        )
+        
+        if city_id is not None:
+            query = query.where(UserFrequency.city_id == city_id)
+        
+        results = session.exec(query).all()
+        
+        # Group by timeslot and take top 3
+        activities = {}
+        for r in results:
+            if r.time_slot not in activities:
+                activities[r.time_slot] = []
+            if len(activities[r.time_slot]) < 3:
+                activities[r.time_slot].append(r.category_name)
+        
+        # Format output
+        formatted = []
+        for slot in sorted(activities.keys()):
+            h1, m1 = slot // 2, (slot % 2) * 30
+            h2, m2 = (slot + 1) // 2, ((slot + 1) % 2) * 30
+            if h2 == 24:
+                h2 = 0
+            time_range = f"{h1:02d}:{m1:02d}-{h2:02d}:{m2:02d}"
+            categories = ", ".join(activities[slot])
+            formatted.append(f"{time_range} {categories}")
+        
+        user_activity = " | ".join(formatted)
+
+    else:
+        # Get all visits, then process hour extraction in Python
+        try:
+            query = select(NewUserVisit.place_type, NewUserVisit.created_at).where(NewUserVisit.user_id == user_id)
+            results = session.exec(query).all()
+            
+            # Process in Python
+            hour_counts = {}
+            for r in results:
+                if r.created_at:
+                    hour = r.created_at.hour
+                    key = (hour, r.place_type)
+                    hour_counts[key] = hour_counts.get(key, 0) + 1
+            
+            # Get top place for each hour
+            activities = {}
+            for (hour, place_type), count in hour_counts.items():
+                if hour not in activities or count > activities[hour][1]:
+                    activities[hour] = (place_type, count)
+            
+        except Exception as e:
+            import traceback
+            print(f"Error in second query: {e}")
+            print(f"Traceback: {traceback.format_exc()}")
+            return f"Error processing visits: {str(e)}"
+        
+        # Format output
+        formatted = []
+        for hour in sorted(activities.keys()):
+            place_type = activities[hour][0]
+            formatted.append(f"{hour:02d}:00 {place_type}")
+        
+        user_activity = " | ".join(formatted)
+    
+    return user_activity
 
 async def get_plan_for_one_day(
     city: str,
@@ -166,30 +245,7 @@ async def get_plan(
 ):
     try:
         # Get user activity data
-        if user_id <= 125000:
-            query = (
-                select(Category.category_name)
-                .select_from(UserFrequency)
-                .join(Category)
-                .where(UserFrequency.poi_category_id == Category.category_id)
-                .where(UserFrequency.user_id == user_id)
-                .group_by(Category.category_name)
-                .order_by(desc(func.sum(UserFrequency.count)))
-            )
-
-            # Add city filter if provided
-            if city_id is not None:
-                query = query.where(UserFrequency.city_id == city_id)
-
-            # Execute query
-            results = session.exec(query).all()
-        else:
-            unique_place_types_query = select(distinct(NewUserVisit.place_type)).where(
-                NewUserVisit.user_id == user_id
-            )
-            results = session.exec(unique_place_types_query).all()
-
-        user_activity = ", ".join(results)
+        user_activity = get_user_activity(user_id, city_id, session)
 
         result = ox.geocoder.geocode_to_gdf(
             f"{lat}, {lon}", 
@@ -664,26 +720,7 @@ async def update_plan(
                 print("Need to fetch new data")
 
                 # Get user activity data
-                if user_id <= 125000:
-                    query = (
-                        select(Category.category_name)
-                        .select_from(UserFrequency)
-                        .join(Category)
-                        .where(UserFrequency.poi_category_id == Category.category_id)
-                        .where(UserFrequency.user_id == user_id)
-                        .group_by(Category.category_name)
-                        .order_by(desc(func.sum(UserFrequency.count)))
-                    )
-
-                    # Execute query
-                    results = session.exec(query).all()
-                else:
-                    unique_place_types_query = select(distinct(NewUserVisit.place_type)).where(
-                        NewUserVisit.user_id == user_id
-                    )
-                    results = session.exec(unique_place_types_query).all()
-
-                user_activity = ", ".join(results)
+                user_activity = get_user_activity(user_id, original_plan.city_id, session)
 
                 print("Step 2: Getting search queries from LLM...")
                 queries = get_llm_queries(
