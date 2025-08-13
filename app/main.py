@@ -160,6 +160,7 @@ async def get_plan(
     number_of_days: int = Query(1, description="Number of days for the travel plan", ge=1, le=5),
     model: str = Query("llama", description="LLM model to use for generating the plan"),
     api_key: str = Query("", description="Provide your own api key for LLMs"),
+    places_api_key: str = Query("", description="Provide your own Google Places API key"),
     session: Session = Depends(get_session)
 ):
     try:
@@ -271,16 +272,23 @@ async def get_plan(
         print("\nStep 2: Executing search queries...")
 
         location = Location(latitude=lat, longitude=lon)
-        results = execute_search_queries(
-            queries=queries,
-            plan_id=plan.id,
-            location=location,
-            session=session,
-            city=city,
-            country=country,
-            radius_km=radius_km,
-            max_results_per_query=20
-        )
+        try:
+            results = execute_search_queries(
+                queries=queries,
+                plan_id=plan.id,
+                location=location,
+                session=session,
+                city=city,
+                country=country,
+                radius_km=radius_km,
+                max_results_per_query=20,
+                places_api_key=places_api_key
+            )
+        except Exception as e:
+            if "API_KEY_INVALID" in str(e) or "INVALID_REQUEST" in str(e):
+                raise HTTPException(status_code=400, detail=f"Invalid Places API key: {str(e)}")
+            else:
+                raise HTTPException(status_code=500, detail=f"Places API error: {str(e)}")
 
         should_use_clustering = number_of_days > 1 and radius_km > 2
         if should_use_clustering:
@@ -478,6 +486,7 @@ async def update_plan(
     message: str = Query(description="Message from user"),
     model: str = Query("llama", description="LLM model to use for generating the plan"),
     api_key: str = Query("", description="Provide your own api key for LLMs"),
+    places_api_key: str = Query("", description="Provide your own Google Places API key"),
     session: Session = Depends(get_session)
 ):
     try:
@@ -546,6 +555,7 @@ async def update_plan(
                     number_of_days=data.get("number_of_days", original_plan.number_of_days), 
                     model=model, 
                     api_key=api_key, 
+                    places_api_key=places_api_key,
                     session=session
                 )
                 
@@ -695,16 +705,23 @@ async def update_plan(
                 print("\nStep 2: Executing search queries...")
 
                 location = Location(latitude=original_plan.lat, longitude=original_plan.long)
-                results = execute_search_queries(
-                    queries=queries,
-                    plan_id=new_plan.id,  # Use new plan ID
-                    location=location,
-                    session=session,
-                    city=original_plan.city,
-                    country=original_plan.country,
-                    radius_km=int(original_plan.radius_km),
-                    max_results_per_query=20
-                )
+                try:
+                    results = execute_search_queries(
+                        queries=queries,
+                        plan_id=new_plan.id,  # Use new plan ID
+                        location=location,
+                        session=session,
+                        city=original_plan.city,
+                        country=original_plan.country,
+                        radius_km=int(original_plan.radius_km),
+                        max_results_per_query=20,
+                        places_api_key=places_api_key
+                    )
+                except Exception as e:
+                    if "API_KEY_INVALID" in str(e) or "INVALID_REQUEST" in str(e):
+                        raise HTTPException(status_code=400, detail=f"Invalid Places API key: {str(e)}")
+                    else:
+                        raise HTTPException(status_code=500, detail=f"Places API error: {str(e)}")
 
                 should_use_clustering = original_plan.number_of_days > 1 and original_plan.radius_km > 2
                 if should_use_clustering:
@@ -906,31 +923,42 @@ async def update_plan(
 async def get_nearby_places(
     lat: float = Query(65.00978049249451, description="Latitude"),
     long: float = Query(25.502957692471355, description="Longitude"),
+    places_api_key: str = Query("", description="Provide your own Google Places API key"),
 ):
-    api_key = os.getenv("PLACES_API_KEY", "")
-    places_api = UnifiedGooglePlacesAPI(api_key)
-    location = Location(latitude=lat, longitude=long)
-    places = places_api.search_places_nearby(
-        location,
-        radius=180,
-        max_results=5,
-        sort_by_popularity=False
-    )
+    try:
+        # Use provided API key or fall back to environment variable
+        api_key = places_api_key if places_api_key else os.getenv("PLACES_API_KEY", "")
+        if not api_key:
+            raise HTTPException(status_code=400, detail="Places API key is required")
+            
+        places_api = UnifiedGooglePlacesAPI(api_key)
+        location = Location(latitude=lat, longitude=long)
+        places = places_api.search_places_nearby(
+            location,
+            radius=180,
+            max_results=5,
+            sort_by_popularity=False
+        )
 
-    display_places = []
-    for place in places:
-        display_places.append({
-            "name": place.name,
-            "location": place.location,
-            "rating": place.rating,
-            "address": place.address,
-            "types": place.types,
-            "photos": place.photos,
-        })
+        display_places = []
+        for place in places:
+            display_places.append({
+                "name": place.name,
+                "location": place.location,
+                "rating": place.rating,
+                "address": place.address,
+                "types": place.types,
+                "photos": place.photos,
+            })
 
-    return {
-        "places": places,
-    }
+        return {
+            "places": places,
+        }
+    except Exception as e:
+        if "API_KEY_INVALID" in str(e) or "INVALID_REQUEST" in str(e):
+            raise HTTPException(status_code=400, detail=f"Invalid Places API key: {str(e)}")
+        else:
+            raise HTTPException(status_code=500, detail=f"Places API error: {str(e)}")
     
 
 @app.get("/user-visits")
@@ -980,15 +1008,17 @@ async def create_user_visit(
 @app.get("/autocomplete")
 async def get_autocomplete_suggestions(
     query: str = Query(..., description="Search query for place autocomplete", min_length=1),
-    session_token: Optional[str] = Query(None, description="Session token for billing optimization")
+    session_token: Optional[str] = Query(None, description="Session token for billing optimization"),
+    places_api_key: str = Query("", description="Provide your own Google Places API key")
 ):
     """
     Get autocomplete suggestions for places using Google Places Autocomplete API
     """
     try:
-        api_key = os.getenv("PLACES_API_KEY", "")
+        # Use provided API key or fall back to environment variable
+        api_key = places_api_key if places_api_key else os.getenv("PLACES_API_KEY", "")
         if not api_key:
-            raise HTTPException(status_code=500, detail="Places API key not configured")
+            raise HTTPException(status_code=400, detail="Places API key is required")
         
         url = "https://places.googleapis.com/v1/places:autocomplete"
         
@@ -1041,10 +1071,16 @@ async def get_autocomplete_suggestions(
                 else:
                     error_text = await response.text()
                     logger.error(f"Autocomplete API failed with status {response.status}: {error_text}")
-                    raise HTTPException(
-                        status_code=response.status,
-                        detail=f"Places API error: {error_text}"
-                    )
+                    if response.status == 400:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Invalid Places API key or request: {error_text}"
+                        )
+                    else:
+                        raise HTTPException(
+                            status_code=response.status,
+                            detail=f"Places API error: {error_text}"
+                        )
                     
     except aiohttp.ClientError as e:
         logger.error(f"Network error in autocomplete: {e}")
@@ -1052,7 +1088,10 @@ async def get_autocomplete_suggestions(
     
     except Exception as e:
         logger.error(f"Unexpected error in autocomplete: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        if "API_KEY_INVALID" in str(e) or "INVALID_REQUEST" in str(e):
+            raise HTTPException(status_code=400, detail=f"Invalid Places API key: {str(e)}")
+        else:
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/place-details")
 async def get_place_details(
@@ -1060,15 +1099,17 @@ async def get_place_details(
     fields: Optional[str] = Query(
         "id,displayName,location,rating,userRatingCount,primaryTypeDisplayName,types,formattedAddress,regularOpeningHours",
         description="Comma-separated list of fields to return"
-    )
+    ),
+    places_api_key: str = Query("", description="Provide your own Google Places API key")
 ):
     """
     Get detailed information about a place using its place_id
     """
     try:
-        api_key = os.getenv("PLACES_API_KEY", "")
+        # Use provided API key or fall back to environment variable
+        api_key = places_api_key if places_api_key else os.getenv("PLACES_API_KEY", "")
         if not api_key:
-            raise HTTPException(status_code=500, detail="Places API key not configured")
+            raise HTTPException(status_code=400, detail="Places API key is required")
         
         url = f"https://places.googleapis.com/v1/places/{place_id}"
         
@@ -1109,10 +1150,16 @@ async def get_place_details(
                 else:
                     error_text = await response.text()
                     logger.error(f"Place details API failed with status {response.status}: {error_text}")
-                    raise HTTPException(
-                        status_code=response.status,
-                        detail=f"Places API error: {error_text}"
-                    )
+                    if response.status == 400:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Invalid Places API key or request: {error_text}"
+                        )
+                    else:
+                        raise HTTPException(
+                            status_code=response.status,
+                            detail=f"Places API error: {error_text}"
+                        )
                     
     except aiohttp.ClientError as e:
         logger.error(f"Network error in place details: {e}")
@@ -1120,7 +1167,10 @@ async def get_place_details(
     
     except Exception as e:
         logger.error(f"Unexpected error in place details: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        if "API_KEY_INVALID" in str(e) or "INVALID_REQUEST" in str(e):
+            raise HTTPException(status_code=400, detail=f"Invalid Places API key: {str(e)}")
+        else:
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/create-user")
 def create_user(

@@ -224,13 +224,16 @@ class UnifiedGooglePlacesAPI:
                     if not next_page_token:
                         break
                 else:
-                    print(f"Nearby API request failed with status {response.status_code}")
-                    print(f"Response: {response.text}")
-                    break
+                    error_msg = f"Nearby API request failed with status {response.status_code}: {response.text}"
+                    print(error_msg)
+                    if response.status_code == 400:
+                        raise Exception(f"API_KEY_INVALID: {error_msg}")
+                    else:
+                        raise Exception(error_msg)
                     
             except Exception as e:
                 print(f"Error in nearby search: {e}")
-                break
+                raise e
             
             requests_made += 1
             if next_page_token:
@@ -306,13 +309,16 @@ class UnifiedGooglePlacesAPI:
                     if not next_page_token:
                         break
                 else:
-                    print(f"Text API request failed with status {response.status_code}")
-                    print(f"Response: {response.text}")
-                    break
+                    error_msg = f"Text API request failed with status {response.status_code}: {response.text}"
+                    print(error_msg)
+                    if response.status_code == 400:
+                        raise Exception(f"API_KEY_INVALID: {error_msg}")
+                    else:
+                        raise Exception(error_msg)
                     
             except Exception as e:
                 print(f"Error in text search: {e}")
-                break
+                raise e
             
             requests_made += 1
             if next_page_token:
@@ -487,11 +493,16 @@ def execute_search_queries(
     city: str = "",
     country: str = "",
     radius_km: int = 5,
-    max_results_per_query: int = 20
+    max_results_per_query: int = 20,
+    places_api_key: str = ""
 ) -> Dict[str, List[PlaceResult]]:
     """Execute search queries using the appropriate API endpoints and store places in database"""
     
-    api_key = os.getenv("PLACES_API_KEY", "")
+    # Use provided API key or fall back to environment variable
+    api_key = places_api_key if places_api_key else os.getenv("PLACES_API_KEY", "")
+    if not api_key:
+        raise Exception("API_KEY_INVALID: Places API key is required")
+    
     places_api = UnifiedGooglePlacesAPI(api_key)
     results = {}
     
@@ -543,29 +554,35 @@ def execute_search_queries(
             print(f"\nExecuting query {i+1}: {query}")
             places = []
 
-            if query_type == "nearby":
-                category = query.get("category")
-                if category:
-                    places = places_api.search_places_nearby(
-                        location=location,
-                        radius=radius_km * 1000,
-                        place_types=[category],
-                        max_results=max_results_per_query,
-                        sort_by_popularity=True
-                    )
-                    print(f"Found {len(places)} places for nearby search: {category}")
-            
-            elif query_type == "text":
-                text_query = query.get("query")
-                if text_query:
-                    places = places_api.search_places_by_text(
-                        text_query=text_query,
-                        location=location,
-                        radius=radius_km * 1000,
-                        max_results=max_results_per_query,
-                        sort_by_popularity=True
-                    )
-                    print(f"Found {len(places)} places for text search: {text_query}")
+            try:
+                if query_type == "nearby":
+                    category = query.get("category")
+                    if category:
+                        places = places_api.search_places_nearby(
+                            location=location,
+                            radius=radius_km * 1000,
+                            place_types=[category],
+                            max_results=max_results_per_query,
+                            sort_by_popularity=True
+                        )
+                        print(f"Found {len(places)} places for nearby search: {category}")
+                
+                elif query_type == "text":
+                    text_query = query.get("query")
+                    if text_query:
+                        places = places_api.search_places_by_text(
+                            text_query=text_query,
+                            location=location,
+                            radius=radius_km * 1000,
+                            max_results=max_results_per_query,
+                            sort_by_popularity=True
+                        )
+                        print(f"Found {len(places)} places for text search: {text_query}")
+                
+            except Exception as e:
+                print(f"Error executing query {i+1}: {e}")
+                # Re-raise the exception to be handled by the calling endpoint
+                raise e
             
             results[query_key] = places
 
