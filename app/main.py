@@ -94,6 +94,7 @@ async def get_plan_for_one_day(
     - **Respect user's food preferences like trying local food or some particular cuisine, don't recommend any other cuisine if user explitly mentioned one**
     - **Ensure at least 2 meals per day but ONLY SUGGEST PLACES FROM DATA GIVEN**
     - **Never recommend places user asks to exclude**
+    - Always make sure that the duration of each place in the itninerary feels natural.
     {"- Always recommend places from only one cluster." if clustering else ""}
     
     Your response should be a JSON object in the following format:
@@ -425,6 +426,7 @@ async def update_plan_for_one_day(
     - Try to incorporate the new data according to the user message. Change original plan as per user requirement.
     - **Ensure at least 2 meals per day but ONLY SUGGEST PLACES FROM DATA GIVEN**
     - **Never recommend places user asks to exclude**
+    - Always make sure that the duration of each place in the itninerary feels natural.
     {"- Always recommend places from only one cluster." if clustering else ""}
     
     Your response should be a JSON object in the following format:
