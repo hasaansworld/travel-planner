@@ -105,7 +105,8 @@ async def get_plan_for_one_day(
         }},
         "itinerary": [
             {{
-                "name": "", # Name of the place
+                "name": "", # Name of the place (must match exactly from places data)
+                "place_id": "", # Google Places ID from the places data
                 "duration": "", # Time of visit (e.g., "10:00 AM - 12:00 PM")
                 "reason": "", # Why this place is included in the plan
                 "practical_notes": "" # Operating hours etc.
@@ -325,13 +326,14 @@ async def get_plan(
         session.add(plan)
         session.commit()
 
-        # NEW: Get places from database and enrich the travel plan
+        # NEW: Get places from database and enrich the travel plan using place_id
         plan_places = get_places_for_plan(session, plan.id)
         
-        # Create lookup dictionary for fast matching
+        # Create lookup dictionary for fast matching using place_id
         place_lookup = {}
         for place in plan_places:
-            place_lookup[place.name] = {
+            place_lookup[place.place_id] = {
+                "name": place.name,
                 "location": {"latitude": place.latitude, "longitude": place.longitude},
                 "photos": place.photos or [],
                 "rating": place.rating,
@@ -340,12 +342,12 @@ async def get_plan(
                 "types": place.types or []
             }
 
-        # Update each place in the travel plan with location data and distance
+        # Update each place in the travel plan with location data and distance using place_id
         for _, day_data in travel_plan.items():
             itinerary = day_data.get("itinerary", [])
             for place in itinerary:
-                name = place.get("name")
-                matched = place_lookup.get(name)
+                place_id = place.get("place_id")
+                matched = place_lookup.get(place_id) if place_id else None
 
                 if matched:
                     place["location"] = matched["location"]
@@ -426,7 +428,8 @@ async def update_plan_for_one_day(
         }},
         "itinerary": [
             {{
-                "name": "", // Name of the place
+                "name": "", // Name of the place (must match exactly from places data)
+                "place_id": "", // Google Places ID from the places data
                 "duration": "", // Time of visit (e.g., "10:00 AM - 12:00 PM")
                 "reason": "", // Why this place is included in the plan
                 "practical_notes": "" // Operating hours etc.
@@ -840,13 +843,14 @@ async def update_plan(
             session.add(new_plan)
             session.commit()
 
-            # NEW: Get places from database and enrich the travel plan
+            # NEW: Get places from database and enrich the travel plan using place_id
             plan_places = get_places_for_plan(session, new_plan.id)
             
-            # Create lookup dictionary for fast matching
+            # Create lookup dictionary for fast matching using place_id
             place_lookup = {}
             for place in plan_places:
-                place_lookup[place.name] = {
+                place_lookup[place.place_id] = {
+                    "name": place.name,
                     "location": {"latitude": place.latitude, "longitude": place.longitude},
                     "photos": place.photos or [],
                     "rating": place.rating,
@@ -855,12 +859,12 @@ async def update_plan(
                     "types": place.types or []
                 }
 
-            # Update each place in the travel plan with location data and distance
+            # Update each place in the travel plan with location data and distance using place_id
             for _, day_data in updated_travel_plan.items():
                 itinerary = day_data.get("itinerary", [])
                 for place in itinerary:
-                    name = place.get("name")
-                    matched = place_lookup.get(name)
+                    place_id = place.get("place_id")
+                    matched = place_lookup.get(place_id) if place_id else None
 
                     if matched:
                         place["location"] = matched["location"]
@@ -1254,15 +1258,16 @@ async def get_plan_by_id(
            
            update_plans = get_all_updates(original_plan.id)
        
-       # Function to enrich a single plan with place data
+       # Function to enrich a single plan with place data using place_id
        def enrich_plan_with_places(travel_plan_data, plan_obj):
            # Get places from database for this plan
            plan_places = get_places_for_plan(session, plan_obj.id)
            
-           # Create lookup dictionary for fast matching
+           # Create lookup dictionary for fast matching using place_id
            place_lookup = {}
            for place in plan_places:
-               place_lookup[place.name] = {
+               place_lookup[place.place_id] = {
+                   "name": place.name,
                    "location": {"latitude": place.latitude, "longitude": place.longitude},
                    "photos": place.photos or [],
                    "rating": place.rating,
@@ -1271,14 +1276,14 @@ async def get_plan_by_id(
                    "types": place.types or []
                }
 
-           # Enrich travel plan with place data and distances
+           # Enrich travel plan with place data and distances using place_id
            enriched_travel_plan = travel_plan_data
            if enriched_travel_plan and isinstance(enriched_travel_plan, dict):
                for _, day_data in enriched_travel_plan.items():
                    itinerary = day_data.get("itinerary", [])
                    for place in itinerary:
-                       name = place.get("name")
-                       matched = place_lookup.get(name)
+                       place_id = place.get("place_id")
+                       matched = place_lookup.get(place_id) if place_id else None
 
                        if matched:
                            place["location"] = matched["location"]

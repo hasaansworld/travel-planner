@@ -615,6 +615,7 @@ def filter_and_sort_places(places):
             weekday_descriptions = opening_hours.get("weekdayDescriptions", [])
             
         filtered_place = {
+            "id": place.id,
             "name": place.name,
             "rating": place.rating,
             "opening_hours": weekday_descriptions
