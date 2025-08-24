@@ -394,10 +394,11 @@ async def get_plan(
         # NEW: Get places from database and enrich the travel plan using place_id
         plan_places = get_places_for_plan(session, plan.id)
         
-        # Create lookup dictionary for fast matching using place_id
+        # Create lookup dictionaries for fast matching using place_id and name
         place_lookup = {}
+        name_lookup = {}
         for place in plan_places:
-            place_lookup[place.place_id] = {
+            place_data = {
                 "name": place.name,
                 "location": {"latitude": place.latitude, "longitude": place.longitude},
                 "photos": place.photos or [],
@@ -406,13 +407,19 @@ async def get_plan(
                 "opening_hours": place.opening_hours,
                 "types": place.types or []
             }
+            place_lookup[place.place_id] = place_data
+            name_lookup[place.name] = place_data
 
         # Update each place in the travel plan with location data and distance using place_id
         for _, day_data in travel_plan.items():
             itinerary = day_data.get("itinerary", [])
             for place in itinerary:
                 place_id = place.get("place_id")
+                place_name = place.get("name")
                 matched = place_lookup.get(place_id) if place_id else None
+                # Fallback to name matching if place_id doesn't match
+                if not matched and place_name:
+                    matched = name_lookup.get(place_name)
 
                 if matched:
                     place["location"] = matched["location"]
@@ -902,10 +909,11 @@ async def update_plan(
             # NEW: Get places from database and enrich the travel plan using place_id
             plan_places = get_places_for_plan(session, new_plan.id)
             
-            # Create lookup dictionary for fast matching using place_id
+            # Create lookup dictionaries for fast matching using place_id and name
             place_lookup = {}
+            name_lookup = {}
             for place in plan_places:
-                place_lookup[place.place_id] = {
+                place_data = {
                     "name": place.name,
                     "location": {"latitude": place.latitude, "longitude": place.longitude},
                     "photos": place.photos or [],
@@ -914,13 +922,19 @@ async def update_plan(
                     "opening_hours": place.opening_hours,
                     "types": place.types or []
                 }
+                place_lookup[place.place_id] = place_data
+                name_lookup[place.name] = place_data
 
             # Update each place in the travel plan with location data and distance using place_id
             for _, day_data in updated_travel_plan.items():
                 itinerary = day_data.get("itinerary", [])
                 for place in itinerary:
                     place_id = place.get("place_id")
+                    place_name = place.get("name")
                     matched = place_lookup.get(place_id) if place_id else None
+                    # Fallback to name matching if place_id doesn't match
+                    if not matched and place_name:
+                        matched = name_lookup.get(place_name)
 
                     if matched:
                         place["location"] = matched["location"]
@@ -1354,10 +1368,11 @@ async def get_plan_by_id(
            # Get places from database for this plan
            plan_places = get_places_for_plan(session, plan_obj.id)
            
-           # Create lookup dictionary for fast matching using place_id
+           # Create lookup dictionaries for fast matching using place_id and name
            place_lookup = {}
+           name_lookup = {}
            for place in plan_places:
-               place_lookup[place.place_id] = {
+               place_data = {
                    "name": place.name,
                    "location": {"latitude": place.latitude, "longitude": place.longitude},
                    "photos": place.photos or [],
@@ -1366,6 +1381,8 @@ async def get_plan_by_id(
                    "opening_hours": place.opening_hours,
                    "types": place.types or []
                }
+               place_lookup[place.place_id] = place_data
+               name_lookup[place.name] = place_data
 
            # Enrich travel plan with place data and distances using place_id
            enriched_travel_plan = travel_plan_data
@@ -1374,7 +1391,11 @@ async def get_plan_by_id(
                    itinerary = day_data.get("itinerary", [])
                    for place in itinerary:
                        place_id = place.get("place_id")
+                       place_name = place.get("name")
                        matched = place_lookup.get(place_id) if place_id else None
+                       # Fallback to name matching if place_id doesn't match
+                       if not matched and place_name:
+                           matched = name_lookup.get(place_name)
 
                        if matched:
                            place["location"] = matched["location"]
