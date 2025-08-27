@@ -45,18 +45,21 @@ def save_response(category, model, difficulty, query_id, user_id, response_data)
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(response_data, f, ensure_ascii=False, indent=2)
 
-async def call_api(client, params, category, model, difficulty):
+async def call_api(client, params, category, model, difficulty, retry):
     key = (params["user_id"], params["query_id"], model)
     try:
-        # response = await client.get(BASE_URL, params=params, timeout=30)
-        # response.raise_for_status()
-        # result = response.json()
-        result = {"success": True}
+        response = await client.get(BASE_URL, params=params, timeout=600)
+        response.raise_for_status()
+        result = response.json()
+        # result = {"success": True}
         api_call_tracker[key] = True
         save_response(category, model, difficulty, params["query_id"], params["user_id"], {"input": params, "output": result})
     except Exception as e:
-        errors[key] = str(e)
-        print(f"Error for user {params['user_id']}, query {params['query_id']}, model {model}: {e}")
+        if not retry:
+            await call_api(client, params, category, model, difficulty, True)
+        else:
+            errors[key] = str(e)
+            print(f"Error for user {params['user_id']}, query {params['query_id']}, model {model}: {e}")
 
 async def process_user(client, user_id, category, is_personalized=True):
     if is_personalized:
@@ -65,6 +68,7 @@ async def process_user(client, user_id, category, is_personalized=True):
         user_queries = queries  # non-personalized user gets all 150 queries
 
     for query in user_queries:
+        print("Processing query", query["query_id"], "for user", user_id, "...")
         for model in MODELS:
             params = {
                 "user_id": user_id,
@@ -73,13 +77,13 @@ async def process_user(client, user_id, category, is_personalized=True):
                 "lon": float(query["longitude"]),
                 "radius_km": int(query["radius_km"]),
                 "rating": float(query["min_rating"]),
-                "intent": query["user_message"],  # use user_message as intent
+                "intent": query["user_message"],
                 "start_date": query["start_date"],
                 "number_of_days": int(query["num_days"]),
                 "model": model,
                 "query_id": int(query["query_id"]),
             }
-            await call_api(client, params, category, model, query["difficulty"])
+            await call_api(client, params, category, model, query["difficulty"], False)
 
 async def run_all():
     semaphore = asyncio.Semaphore(PARALLEL_REQUESTS)
@@ -87,8 +91,8 @@ async def run_all():
         tasks = []
 
         # Personalized users
-        # for user_id in personalized_users:
-        #     tasks.append(process_user(client, user_id, "personalized", is_personalized=True))
+        for user_id in personalized_users:
+            tasks.append(process_user(client, user_id, "personalized", is_personalized=True))
 
         # Non-personalized user
         tasks.append(process_user(client, non_personalized_user, "non-personalized", is_personalized=False))
