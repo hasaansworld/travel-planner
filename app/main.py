@@ -171,7 +171,7 @@ async def get_plan_for_one_day(
     - ## Always include a specific place from the places data, don't recommend some generic recommendation like "a local restaurant" or "a local cafe"
     - ## Always recommend places from places data provided, NEVER recommend places from your own
     - ## Always use correct place names from the places data provided including special characters from original place name. Use exact name as orginal.
-    - ## Provide appropriate gap between places
+    - ## Provide appropriate time gap between visiting places
     - **Respect user's food preferences like trying local food or some particular cuisine, don't recommend any other cuisine if user explitly mentioned one**
     - **Ensure at least 2 meals per day but ONLY SUGGEST PLACES FROM DATA GIVEN**
     - **Never recommend places user asks to exclude**
@@ -489,7 +489,7 @@ async def update_plan_for_one_day(
     - ## Always include a specific place from the places data, don't recommend some generic recommendation like "a local restaurant" or "a local cafe"
     - ## Always recommend places from places data provided, NEVER recommend places from your own
     - ## Always use correct place names from the places data provided including special characters from original place name. Use exact name as orginal.
-    - ## Provide appropriate gap between places
+    - ## Provide appropriate time gap between visiting places
     - Try to incorporate the new data according to the user message. Change original plan as per user requirement.
     - **Ensure at least 2 meals per day but ONLY SUGGEST PLACES FROM DATA GIVEN**
     - **Never recommend places user asks to exclude**
