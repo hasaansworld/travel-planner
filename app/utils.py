@@ -1,6 +1,6 @@
 import traceback
-import openai
-from groq import Groq
+from openai import AsyncOpenAI
+from groq import AsyncGroq
 import os
 import json
 
@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def generate_llm_response(messages, model_name, api_key="", **kwargs):
+async def generate_llm_response(messages, model_name, api_key="", **kwargs):
     # Set default parameters
     max_tokens = kwargs.get('max_tokens', 1000)
     temperature = kwargs.get('temperature', 0.7)
@@ -50,7 +50,7 @@ def generate_llm_response(messages, model_name, api_key="", **kwargs):
             if not api_key:
                 raise ValueError("OPENAI_API_KEY environment variable is required for GPT models")
             
-            client = openai.OpenAI(api_key=api_key)
+            client = AsyncOpenAI(api_key=api_key)
         
         # Route to Groq for all other models
         else:
@@ -59,9 +59,9 @@ def generate_llm_response(messages, model_name, api_key="", **kwargs):
             if not api_key:
                 raise ValueError("GROQ_API_KEY environment variable is required for non-GPT models")
             
-            client = Groq(api_key=api_key)
+            client = AsyncGroq(api_key=api_key)
 
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=model_name,
             messages=messages,
             response_format={ "type": "json_object" },

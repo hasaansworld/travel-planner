@@ -151,6 +151,7 @@ async def get_plan_for_one_day(
     places_data: Any,
     exclude_places: str,
     clustering: bool = False,
+    model: str = "llama",
     api_key: str = "",
 ):
     
@@ -214,9 +215,9 @@ async def get_plan_for_one_day(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_message}
     ]
-    response = generate_llm_response(
+    response = await generate_llm_response(
         messages=messages,
-        model_name="llama",
+        model_name=model,
         temperature=0,
         api_key=api_key,
     )
@@ -267,9 +268,9 @@ async def get_plan(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ]
-            response = generate_llm_response(
+            response = await generate_llm_response(
                 messages=messages,
-                model_name="llama",
+                model_name=model,
                 temperature=0,
                 api_key=api_key
             )
@@ -307,7 +308,7 @@ async def get_plan(
 
         # Step 1: Get queries from LLM
         print("Step 1: Getting search queries from LLM...")
-        queries = get_llm_queries(
+        queries = await get_llm_queries(
             user_activity=user_activity,
             country=country,
             city=city,
@@ -381,7 +382,7 @@ async def get_plan(
         for i in range(number_of_days):
             day_number = i + 1
             print("Making plan for day", day_number)
-            plan_per_day = await get_plan_for_one_day(city, country, start_date, day_name, intent, user_activity, places_data, ", ".join(excluded_places), clustering=should_use_clustering)
+            plan_per_day = await get_plan_for_one_day(city, country, start_date, day_name, intent, user_activity, places_data, ", ".join(excluded_places), clustering=should_use_clustering, model=model)
             for place in plan_per_day.get("itinerary", {}):
                 excluded_places.append(place.get("name", ""))
             
@@ -471,6 +472,7 @@ async def update_plan_for_one_day(
     message: str,
     places_data: Any,
     exclude_places: str = "",
+    model: str = "llama",
     clustering: bool = False,
     api_key: str = "",
 ):
@@ -530,9 +532,9 @@ async def update_plan_for_one_day(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_message}
     ]
-    response = generate_llm_response(
+    response = await generate_llm_response(
         messages=messages,
-        model_name="llama",
+        model_name=model,
         temperature=0,
         api_key=api_key,
     )
@@ -592,9 +594,9 @@ async def update_plan(
             {"role": "user", "content": user_message}
         ]
 
-        response = generate_llm_response(
+        response = await generate_llm_response(
             messages=messages,
-            model_name="llama",
+            model_name=model,
             temperature=0,
             api_key=api_key,
         )
@@ -684,9 +686,9 @@ async def update_plan(
         ]
 
         print("Step 1: Checking if need to fetch data again")
-        response = generate_llm_response(
+        response = await generate_llm_response(
             messages=messages,
-            model_name="llama",
+            model_name=model,
             temperature=0,
             api_key=api_key,
         )
@@ -730,7 +732,7 @@ async def update_plan(
                 user_activity = get_user_activity(user_id, original_plan.city_id, session)
 
                 print("Step 2: Getting search queries from LLM...")
-                queries = get_llm_queries(
+                queries = await get_llm_queries(
                     user_activity=user_activity,
                     country=original_plan.country,
                     city=original_plan.city,
@@ -802,7 +804,7 @@ async def update_plan(
                 if isinstance(travel_plan, dict):
                     for key in travel_plan:
                         print("Making plan for", key)
-                        plan_per_day = await update_plan_for_one_day(original_plan.city, original_plan.country, travel_plan, original_plan.travel_date, day_name, message, places_data, ", ".join(excluded_places), clustering=should_use_clustering)
+                        plan_per_day = await update_plan_for_one_day(original_plan.city, original_plan.country, travel_plan, original_plan.travel_date, day_name, message, places_data, ", ".join(excluded_places), clustering=should_use_clustering, model=model)
                         for place in plan_per_day.get("itinerary", {}):
                             excluded_places.append(place.get("name", ""))
                         
@@ -834,9 +836,9 @@ async def update_plan(
                 ]
 
                 print("Checking if need to retrieve places data")
-                response = generate_llm_response(
+                response = await generate_llm_response(
                     messages=messages,
-                    model_name="llama",
+                    model_name=model,
                     temperature=0,
                     api_key=api_key,
                 )
@@ -894,7 +896,7 @@ async def update_plan(
                 if isinstance(travel_plan, dict):
                     for key in travel_plan:
                         print("Making plan for", key)
-                        plan_per_day = await update_plan_for_one_day(original_plan.city, original_plan.country, travel_plan, original_plan.travel_date, day_name, message, processed_data, exclude_places=", ".join(excluded_places))
+                        plan_per_day = await update_plan_for_one_day(original_plan.city, original_plan.country, travel_plan, original_plan.travel_date, day_name, message, processed_data, exclude_places=", ".join(excluded_places), model=model)
                         for place in plan_per_day.get("itinerary", {}):
                             excluded_places.append(place.get("name", ""))
                         updated_travel_plan[key] = plan_per_day

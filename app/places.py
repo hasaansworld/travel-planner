@@ -386,7 +386,7 @@ class UnifiedGooglePlacesAPI:
             print(f"Error parsing place data: {e}")
             return None
 
-def get_llm_queries(
+async def get_llm_queries(
     user_activity: str,
     country: str = "Finland",
     city: str = "Oulu",
@@ -470,7 +470,7 @@ def get_llm_queries(
         })
 
     print("Getting queries from LLM...")
-    response = generate_llm_response(
+    response = await generate_llm_response(
         messages=messages,
         model_name=model,
         temperature=0,
