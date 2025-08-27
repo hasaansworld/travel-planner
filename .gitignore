@@ -4,3 +4,4 @@ dataset/*
 cache
 .env
 test-scripts/travel-plans
+test-scripts/plan_evals
