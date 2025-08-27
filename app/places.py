@@ -227,6 +227,12 @@ class UnifiedGooglePlacesAPI:
                     error_msg = f"Nearby API request failed with status {response.status_code}: {response.text}"
                     print(error_msg)
                     if response.status_code == 400:
+                        if place_types:
+                            text_query = place_types[0] if len(place_types) == 1 else " and ".join(place_types)
+                        else:
+                            text_query = "places of interest"
+                        return self.search_places_by_text(text_query, location, radius, max_results, sort_by_popularity)
+                    elif response.status_code == 401:
                         raise Exception(f"API_KEY_INVALID: {error_msg}")
                     else:
                         raise Exception(error_msg)
