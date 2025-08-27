@@ -20,11 +20,14 @@ for category in ["personalized", "non-personalized"]:
             (OUTPUT_DIR / category / model / difficulty).mkdir(parents=True, exist_ok=True)
 
 # Load queries
+count = 0
 queries = []
 with open(CSV_FILE, newline="", encoding="utf-8") as f:
     reader = csv.DictReader(f)
     for row in reader:
-        queries.append(row)
+        if count < 10:
+            queries.append(row)
+            count += 1
 
 # Prepare users
 personalized_users = [random.randint(1, 125000) for _ in range(25)] + list(range(125003, 125028))
@@ -84,8 +87,8 @@ async def run_all():
         tasks = []
 
         # Personalized users
-        for user_id in personalized_users:
-            tasks.append(process_user(client, user_id, "personalized", is_personalized=True))
+        # for user_id in personalized_users:
+        #     tasks.append(process_user(client, user_id, "personalized", is_personalized=True))
 
         # Non-personalized user
         tasks.append(process_user(client, non_personalized_user, "non-personalized", is_personalized=False))
