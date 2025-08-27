@@ -230,6 +230,7 @@ Use the exact constraint identifiers from the USER CONSTRAINTS section.
 1. Carefully review the day's itinerary
 2. Evaluate each common sense constraint for this day
 3. Evaluate each user-specific hard constraint for this day
+4. ### Pay special attention to evaluating hard constraints and be strict about them
 4. Categorize each constraint as passed or failed
 5. Return the results in the specified JSON format
 6. Do not include explanations or additional text - only the JSON response
@@ -297,10 +298,6 @@ async def process_evaluations_for_model(eval_model):
     global completed_evals
     print(f"\nProcessing evaluations with model: {eval_model}")
     
-    # Process first 10 plans
-    plans_processed = 0
-    max_plans = 10
-    
     for category in ["personalized", "non-personalized"]:
         for plan_model in PLAN_MODELS:
             for difficulty in DIFFICULTIES:
@@ -310,9 +307,6 @@ async def process_evaluations_for_model(eval_model):
                     continue
                 
                 for plan_file in plan_dir.glob("*.json"):
-                    if plans_processed >= max_plans:
-                        return  # Exit after processing 10 plans
-                    plans_processed += 1
                     # Extract query_id from filename (e.g., query_1_user_125003.json -> 1)
                     try:
                         query_id = int(plan_file.name.split('_')[1])
