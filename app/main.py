@@ -1239,6 +1239,24 @@ async def get_place_details(
         else:
             raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+@app.get("/user-history")
+async def get_user_history(
+    user_id: int = Query(..., description="User ID"),
+    session: Session = Depends(get_session)
+):
+    try:
+        user_activity = get_user_activity(user_id, 1, session)
+        
+        return {
+            "user_id": user_id,
+            "user_activity": user_activity,
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching user history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch user history: {str(e)}")
+
+
 @app.get("/create-user")
 def create_user(
    email: str = Query(..., description="User email"),
