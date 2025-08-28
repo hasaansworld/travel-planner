@@ -1,0 +1,106 @@
+{
+  "gpt_easy": {
+    "avg_personalized": 6.65,
+    "avg_non_personalized": 4.5,
+    "avg_difference": 2.15,
+    "total_evaluations": 40,
+    "personalized_wins": 34,
+    "win_rate": 85.0
+  },
+  "gpt_medium": {
+    "avg_personalized": 6.8,
+    "avg_non_personalized": 4.15,
+    "avg_difference": 2.65,
+    "total_evaluations": 40,
+    "personalized_wins": 36,
+    "win_rate": 90.0
+  },
+  "gpt_hard": {
+    "avg_personalized": 6.05,
+    "avg_non_personalized": 3.65,
+    "avg_difference": 2.4,
+    "total_evaluations": 40,
+    "personalized_wins": 30,
+    "win_rate": 75.0
+  },
+  "gpt_total": {
+    "avg_personalized": 6.5,
+    "avg_non_personalized": 4.1,
+    "avg_difference": 2.4,
+    "total_evaluations": 120,
+    "personalized_wins": 100,
+    "win_rate": 83.33333333333334
+  },
+  "llama_easy": {
+    "avg_personalized": 6.25,
+    "avg_non_personalized": 4.5,
+    "avg_difference": 1.75,
+    "total_evaluations": 40,
+    "personalized_wins": 30,
+    "win_rate": 75.0
+  },
+  "llama_medium": {
+    "avg_personalized": 5.95,
+    "avg_non_personalized": 3.95,
+    "avg_difference": 2.0,
+    "total_evaluations": 40,
+    "personalized_wins": 32,
+    "win_rate": 80.0
+  },
+  "llama_hard": {
+    "avg_personalized": 5.75,
+    "avg_non_personalized": 3.7,
+    "avg_difference": 2.05,
+    "total_evaluations": 40,
+    "personalized_wins": 28,
+    "win_rate": 70.0
+  },
+  "llama_total": {
+    "avg_personalized": 5.983333333333333,
+    "avg_non_personalized": 4.05,
+    "avg_difference": 1.9333333333333333,
+    "total_evaluations": 120,
+    "personalized_wins": 90,
+    "win_rate": 75.0
+  },
+  "deepseek_easy": {
+    "avg_personalized": 6.45,
+    "avg_non_personalized": 3.9,
+    "avg_difference": 2.55,
+    "total_evaluations": 40,
+    "personalized_wins": 34,
+    "win_rate": 85.0
+  },
+  "deepseek_medium": {
+    "avg_personalized": 6.6,
+    "avg_non_personalized": 3.95,
+    "avg_difference": 2.65,
+    "total_evaluations": 40,
+    "personalized_wins": 40,
+    "win_rate": 100.0
+  },
+  "deepseek_hard": {
+    "avg_personalized": 6.75,
+    "avg_non_personalized": 3.5,
+    "avg_difference": 3.25,
+    "total_evaluations": 40,
+    "personalized_wins": 40,
+    "win_rate": 100.0
+  },
+  "deepseek_total": {
+    "avg_personalized": 6.6,
+    "avg_non_personalized": 3.783333333333333,
+    "avg_difference": 2.816666666666667,
+    "total_evaluations": 120,
+    "personalized_wins": 114,
+    "win_rate": 95.0
+  },
+  "total": {
+    "avg_personalized": 6.361111111111111,
+    "avg_non_personalized": 3.977777777777778,
+    "avg_difference": 2.3833333333333333,
+    "total_evaluations": 360,
+    "personalized_wins": 304,
+    "win_rate": 84.44444444444444
+  }
+}

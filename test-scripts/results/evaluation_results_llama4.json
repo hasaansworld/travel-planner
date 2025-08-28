@@ -1,0 +1,106 @@
+{
+  "gpt_easy": {
+    "micro_pass": 98.69791666666666,
+    "macro_pass": 90.0,
+    "total_plans": 40,
+    "total_passed": 379,
+    "total_constraints": 384,
+    "plans_all_passed": 36
+  },
+  "gpt_medium": {
+    "micro_pass": 98.27272727272728,
+    "macro_pass": 80.0,
+    "total_plans": 40,
+    "total_passed": 1081,
+    "total_constraints": 1100,
+    "plans_all_passed": 32
+  },
+  "gpt_hard": {
+    "micro_pass": 97.22222222222221,
+    "macro_pass": 62.5,
+    "total_plans": 40,
+    "total_passed": 1225,
+    "total_constraints": 1260,
+    "plans_all_passed": 25
+  },
+  "gpt_total": {
+    "micro_pass": 97.84985422740526,
+    "macro_pass": 77.5,
+    "total_plans": 120,
+    "total_passed": 2685,
+    "total_constraints": 2744,
+    "plans_all_passed": 93
+  },
+  "llama_easy": {
+    "micro_pass": 98.17708333333334,
+    "macro_pass": 82.5,
+    "total_plans": 40,
+    "total_passed": 377,
+    "total_constraints": 384,
+    "plans_all_passed": 33
+  },
+  "llama_medium": {
+    "micro_pass": 95.20795660036167,
+    "macro_pass": 37.5,
+    "total_plans": 40,
+    "total_passed": 1053,
+    "total_constraints": 1106,
+    "plans_all_passed": 15
+  },
+  "llama_hard": {
+    "micro_pass": 92.88537549407114,
+    "macro_pass": 27.500000000000004,
+    "total_plans": 40,
+    "total_passed": 1175,
+    "total_constraints": 1265,
+    "plans_all_passed": 11
+  },
+  "llama_total": {
+    "micro_pass": 94.55535390199637,
+    "macro_pass": 49.166666666666664,
+    "total_plans": 120,
+    "total_passed": 2605,
+    "total_constraints": 2755,
+    "plans_all_passed": 59
+  },
+  "deepseek_easy": {
+    "micro_pass": 98.69791666666666,
+    "macro_pass": 95.0,
+    "total_plans": 40,
+    "total_passed": 379,
+    "total_constraints": 384,
+    "plans_all_passed": 38
+  },
+  "deepseek_medium": {
+    "micro_pass": 95.38461538461539,
+    "macro_pass": 45.0,
+    "total_plans": 40,
+    "total_passed": 1054,
+    "total_constraints": 1105,
+    "plans_all_passed": 18
+  },
+  "deepseek_hard": {
+    "micro_pass": 93.94654088050315,
+    "macro_pass": 35.0,
+    "total_plans": 40,
+    "total_passed": 1195,
+    "total_constraints": 1272,
+    "plans_all_passed": 14
+  },
+  "deepseek_total": {
+    "micro_pass": 95.18290474465773,
+    "macro_pass": 58.333333333333336,
+    "total_plans": 120,
+    "total_passed": 2628,
+    "total_constraints": 2761,
+    "plans_all_passed": 70
+  },
+  "total": {
+    "micro_pass": 95.85956416464892,
+    "macro_pass": 61.66666666666667,
+    "total_plans": 360,
+    "total_passed": 7918,
+    "total_constraints": 8260,
+    "plans_all_passed": 222
+  }
+}

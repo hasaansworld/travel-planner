@@ -1,0 +1,82 @@
+{
+  "125003": {
+    "user_id": 125003,
+    "user_activity": "07:00 coffee_shop | 08:00 coffee_shop | 09:00 coffee_shop | 10:00 park | 11:00 book_store | 12:00 museum | 13:00 museum | 14:00 museum | 15:00 museum | 16:00 art_gallery | 17:00 book_store | 18:00 chinese_restaurant | 19:00 pizza_restaurant"
+  },
+  "125004": {
+    "user_id": 125004,
+    "user_activity": "06:00 gym | 07:00 fitness_center | 08:00 gym | 09:00 corporate_office | 10:00 park | 11:00 park | 12:00 vegetarian_restaurant | 13:00 restaurant | 14:00 sporting_goods_store | 15:00 park | 18:00 grocery_store"
+  },
+  "125005": {
+    "user_id": 125005,
+    "user_activity": "09:00 coffee_shop | 10:00 library | 11:00 library | 12:00 pizza_restaurant | 13:00 library | 14:00 university | 15:00 university | 16:00 university | 17:00 book_store | 18:00 middle_eastern_restaurant | 19:00 pizza_restaurant | 20:00 restaurant | 21:00 bar | 22:00 bar | 23:00 bar"
+  },
+  "125006": {
+    "user_id": 125006,
+    "user_activity": "08:00 primary_school | 09:00 pharmacy | 10:00 museum | 11:00 museum | 12:00 bakery | 13:00 zoo | 14:00 home_improvement_store | 15:00 playground | 16:00 playground | 17:00 grocery_store | 18:00 italian_restaurant | 19:00 restaurant"
+  },
+  "125007": {
+    "user_id": 125007,
+    "user_activity": "06:00 gym | 08:00 coffee_shop | 09:00 hotel | 10:00 corporate_office | 11:00 airport | 12:00 sandwich_shop | 13:00 book_store | 14:00 convention_center | 15:00 airport | 17:00 hotel | 18:00 train_station | 19:00 steak_house | 20:00 steak_house | 22:00 pharmacy"
+  },
+  "125008": {
+    "user_id": 125008,
+    "user_activity": "09:00 library | 10:00 museum | 11:00 museum | 12:00 museum | 13:00 historical_landmark | 14:00 museum | 15:00 historical_place | 16:00 monument | 17:00 bar_and_grill | 19:00 deli"
+  },
+  "125009": {
+    "user_id": 125009,
+    "user_activity": "01:00 diner | 11:00 coffee_shop | 12:00 coffee_shop | 14:00 store | 15:00 electronics_store | 16:00 store | 17:00 grocery_store | 18:00 art_studio | 19:00 subway_station | 20:00 concert_hall | 21:00 bowling_alley | 22:00 bar | 23:00 night_club"
+  },
+  "125010": {
+    "user_id": 125010,
+    "user_activity": "07:00 yoga_studio | 09:00 coffee_shop | 10:00 breakfast_restaurant | 11:00 french_restaurant | 12:00 restaurant | 13:00 shoe_store | 14:00 clothing_store | 15:00 department_store | 16:00 clothing_store | 17:00 home_goods_store | 18:00 store | 20:00 french_restaurant"
+  },
+  "125011": {
+    "user_id": 125011,
+    "user_activity": "07:00 gym | 08:00 cycling_park | 09:00 park | 10:00 park | 11:00 hiking_area | 13:00 beach | 14:00 sports_complex | 15:00 park | 16:00 shoe_store | 17:00 sporting_goods_store | 18:00 sports_complex | 19:00 stadium | 20:00 bar | 21:00 bar_and_grill"
+  },
+  "125012": {
+    "user_id": 125012,
+    "user_activity": "08:00 coffee_shop | 09:00 market | 10:00 deli | 11:00 grocery_store | 13:00 ramen_restaurant | 14:00 market | 15:00 cafe | 17:00 food_store | 18:00 pizza_restaurant | 19:00 market | 20:00 fine_dining_restaurant | 21:00 ramen_restaurant | 22:00 bar | 23:00 fast_food_restaurant"
+  },
+  "125013": {
+    "user_id": 125013,
+    "user_activity": "09:00 park | 10:00 park | 11:00 historical_landmark | 12:00 monument | 13:00 library | 14:00 museum | 15:00 botanical_garden | 16:00 museum | 17:00 tourist_attraction | 18:00 observation_deck | 19:00 arena | 20:00 performing_arts_theater | 21:00 concert_hall | 22:00 comedy_club"
+  },
+  "125014": {
+    "user_id": 125014,
+    "user_activity": "08:00 dog_park | 09:00 cycling_park | 10:00 sports_complex | 11:00 adventure_sports_center | 12:00 roller_coaster | 13:00 amusement_park | 14:00 video_arcade | 15:00 bowling_alley | 16:00 museum | 17:00 tourist_attraction | 18:00 observation_deck | 19:00 concert_hall | 20:00 performing_arts_theater | 21:00 comedy_club | 22:00 night_club"
+  },
+  "125015": {
+    "user_id": 125015,
+    "user_activity": "09:00 coffee_shop | 10:00 market | 11:00 grocery_store | 12:00 historical_landmark | 13:00 electronics_store | 14:00 market | 15:00 department_store | 16:00 shopping_mall | 17:00 grocery_store | 18:00 food_store | 19:00 tourist_attraction | 22:00 bar"
+  },
+  "125016": {
+    "user_id": 125016,
+    "user_activity": "08:00 gas_station | 09:00 parking | 10:00 parking | 11:00 monument | 12:00 car_dealer | 13:00 observation_deck | 14:00 car_repair | 15:00 tourist_attraction | 16:00 car_rental | 17:00 electric_vehicle_charging_station | 18:00 market | 19:00 bar | 21:00 bar"
+  },
+  "125017": {
+    "user_id": 125017,
+    "user_activity": "09:00 zoo | 10:00 roller_coaster | 11:00 amusement_park | 12:00 tourist_attraction | 13:00 sports_complex | 14:00 botanical_garden | 15:00 campground | 16:00 camping_cabin"
+  },
+  "125018": {
+    "user_id": 125018,
+    "user_activity": "09:00 coffee_shop | 10:00 cafe | 11:00 coffee_shop | 12:00 brunch_restaurant | 13:00 market | 14:00 market | 15:00 market"
+  },
+  "125019": {
+    "user_id": 125019,
+    "user_activity": "08:00 gas_station | 09:00 park | 10:00 car_wash | 11:00 dessert_shop | 12:00 fast_food_restaurant | 13:00 market | 14:00 car_repair | 16:00 car_rental | 17:00 electric_vehicle_charging_station"
+  },
+  "125020": {
+    "user_id": 125020,
+    "user_activity": "08:00 park | 09:00 park | 10:00 park | 11:00 zoo | 12:00 picnic_ground"
+  },
+  "125021": {
+    "user_id": 125021,
+    "user_activity": "09:00 park | 10:00 electronics_store | 11:00 electronics_store | 12:00 market | 13:00 electronics_store | 14:00 amusement_center"
+  },
+  "125022": {
+    "user_id": 125022,
+    "user_activity": "10:00 clothing_store | 11:00 clothing_store | 12:00 department_store | 13:00 department_store"
+  }
+}
