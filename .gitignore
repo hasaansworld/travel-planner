@@ -5,3 +5,4 @@ cache
 .env
 test-scripts/travel-plans
 test-scripts/plan_evals
+test-scripts/personalization_evals
