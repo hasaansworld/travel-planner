@@ -51,12 +51,20 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-def calculate_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+def calculate_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float, max_distance_km: float|None = None) -> float:
     """
     Calculate distance between two points in meters using geodesic distance
+    If max_distance_km is provided and distance exceeds it, clamp to max_distance_km * 1000 meters
     """
     try:
         distance = geodesic((lat1, lon1), (lat2, lon2)).meters
+        
+        # Apply clamping if max_distance_km is provided
+        if max_distance_km is not None:
+            max_distance_meters = max_distance_km * 1000
+            if distance > max_distance_meters:
+                distance = max_distance_meters
+        
         return round(distance, 2)
     except Exception as e:
         logger.error(f"Error calculating distance: {e}")
@@ -435,7 +443,7 @@ async def get_plan(
                     place_lat = matched["location"].get("latitude")
                     place_lon = matched["location"].get("longitude")
                     if place_lat is not None and place_lon is not None:
-                        distance = calculate_distance_meters(lat, lon, place_lat, place_lon)
+                        distance = calculate_distance_meters(lat, lon, place_lat, place_lon, radius_km)
                         place["distance"] = distance
                     else:
                         place["distance"] = None
@@ -952,7 +960,7 @@ async def update_plan(
                         place_lat = matched["location"].get("latitude")
                         place_lon = matched["location"].get("longitude")
                         if place_lat is not None and place_lon is not None:
-                            distance = calculate_distance_meters(original_plan.lat, original_plan.long, place_lat, place_lon)
+                            distance = calculate_distance_meters(original_plan.lat, original_plan.long, place_lat, place_lon, original_plan.radius_km)
                             place["distance"] = distance
                         else:
                             place["distance"] = None
@@ -1413,7 +1421,7 @@ async def get_plan_by_id(
                            place_lat = matched["location"].get("latitude")
                            place_lon = matched["location"].get("longitude")
                            if place_lat is not None and place_lon is not None:
-                               distance = calculate_distance_meters(plan_obj.lat, plan_obj.long, place_lat, place_lon)
+                               distance = calculate_distance_meters(plan_obj.lat, plan_obj.long, place_lat, place_lon, plan_obj.radius_km)
                                place["distance"] = distance
                            else:
                                place["distance"] = None
