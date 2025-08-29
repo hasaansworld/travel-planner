@@ -99,6 +99,10 @@ def save_evaluation(category, plan_model, difficulty, eval_model, filename, eval
     # Use folder structure: personalization_evals/eval_model/category/plan_model/difficulty
     eval_model_folder = eval_model.replace("gpt-5", "gpt").replace("llama4", "llama")
     file_path = PERSONALIZATION_EVALS_DIR / eval_model_folder / category / plan_model / difficulty / eval_filename
+    
+    # Create directories if they don't exist
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(evaluation_data, f, ensure_ascii=False, indent=2)
 
@@ -159,45 +163,52 @@ def extract_itinerary_from_plan(plan_data):
     
     return itinerary_data
 
-async def evaluate_single_plan(plan_itinerary, user_history, query_id, plan_type, eval_model):
+async def evaluate_single_plan(plan_itinerary, user_history, query_id, plan_type, eval_model, query_text=""):
     """Evaluate personalization of a single plan against user history"""
     system_message = """
-    You are evaluating how well a travel itinerary matches a user's personal preferences based on their past activity history. Review the user's historical preferences and the generated itinerary, then provide a personalization score in the json format given below.
+    You are evaluating how well a travel itinerary is personalized based on a user's past activity history while keeping the constraints of their travel query in mind. The plan has been personalized to match the user's preferences within the bounds of what they specifically requested. Review the user's historical preferences, their travel query constraints, and the generated itinerary, then provide a personalization score in the json format given below.
 
 EVALUATION INSTRUCTIONS:
-Analyze how well the itinerary aligns with the user's demonstrated preferences by considering:
+Analyze how well the itinerary personalizes the user's request by considering:
 
-Place Type Preferences: Does the itinerary include types of places the user frequently visits (restaurants, museums, parks, attractions, etc.)?
+Query Constraint Adherence: The plan must fulfill the specific requirements mentioned in the travel query (destinations, activities, cuisine types, etc.)
 
-Time-of-Day Patterns: Are activities scheduled at times when the user typically prefers certain activities (morning museums, evening dining, etc.)?
-Cuisine Preferences: Do restaurant recommendations match the user's historical dining preferences and favorite cuisines?
+Personalized Selection Within Constraints: Within the query requirements, how well does the plan choose options that align with the user's historical preferences?
 
-Activity Style: Does the itinerary match the user's preferred activity intensity and style (cultural vs. adventure, indoor vs. outdoor, etc.)?
+Place Type Preferences: Does the itinerary include types of places the user frequently visits when selecting venues that meet the query constraints?
+
+Time-of-Day Patterns: Are activities scheduled at times when the user typically prefers certain activities?
+
+Cuisine Preferences: When restaurants are selected to meet query constraints, do they match the user's historical dining preferences?
+
+Activity Style: Does the itinerary match the user's preferred activity intensity and style while fulfilling the query requirements?
 
 Visit Duration Patterns: Are the recommended venues similar to places where the user typically spends time?
 
 
 SCORING CRITERIA:
-9-10: Excellent personalization - itinerary strongly reflects user's established preferences
-7-8: Good personalization - most recommendations align with user history
-5-6: Moderate personalization - some alignment but missing key preferences
-3-4: Poor personalization - limited connection to user's past behavior
-1-2: No personalization - itinerary ignores user preferences entirely
+9-10: Excellent personalization - itinerary strongly reflects user's established preferences while perfectly meeting query constraints
+7-8: Good personalization - most selections within query constraints align well with user history
+5-6: Moderate personalization - some alignment with preferences while meeting query requirements
+3-4: Poor personalization - meets query constraints but limited connection to user's past behavior
+1-2: No personalization - generic selections that ignore user preferences despite meeting query constraints
 
 RESPONSE FORMAT:
 {"score": x, "explanation": ""}
 
 Explanation:
+- How well the plan personalizes selections within the query constraints
 - What aspects match the user's preferences well
 - What aspects don't align with user history
-- Important user preferences that were ignored
+- Important user preferences that could have been incorporated while still meeting query requirements
 
 EXAMPLE:
-{"score": 8, "explanation": "Scheduled activities too early in the day when user historically prefers afternoon/evening activities. No outdoor activities despite user's consistent park visits and hiking history."}
+{"score": 8, "explanation": "Plan successfully incorporates user's preference for cultural attractions and fine dining within the query's museum and restaurant requirements. However, scheduled activities too early in the day when user historically prefers afternoon/evening activities. Could have selected more outdoor dining options that align with user's park visit history."}
 
     """
     
     user_message = f"""
+travel_query: {query_text}
 query_id: {query_id}
 user_history: {user_history}
 plan_type: {plan_type}
@@ -229,17 +240,17 @@ plan_itinerary: {json.dumps(plan_itinerary, indent=2)}
         print("=" * 60)
         return {"error": str(e)}
 
-async def evaluate_personalization(personalized_plan, non_personalized_plan, user_history, query_id, eval_model):
+async def evaluate_personalization(personalized_plan, non_personalized_plan, user_history, query_id, eval_model, query_text=""):
     """Evaluate personalization of two plans against user history separately"""
     
     # Evaluate personalized plan
     personalized_result = await evaluate_single_plan(
-        personalized_plan, user_history, query_id, "personalized", eval_model
+        personalized_plan, user_history, query_id, "personalized", eval_model, query_text
     )
     
     # Evaluate non-personalized plan
     non_personalized_result = await evaluate_single_plan(
-        non_personalized_plan, user_history, query_id, "non-personalized", eval_model
+        non_personalized_plan, user_history, query_id, "non-personalized", eval_model, query_text
     )
     
     # Combine results
@@ -320,6 +331,9 @@ async def process_evaluations_for_model(eval_model):
                     completed_evals += 1
                     continue
                 
+                # Get query text from queries_data
+                query_text = queries_data.get(query_id, {}).get("user_message", "")
+                
                 # Evaluate personalization
                 print(f"Evaluating personalization: {plan_model}/{difficulty}/query_{query_id} with {eval_model}")
                 evaluation = await evaluate_personalization(
@@ -327,7 +341,8 @@ async def process_evaluations_for_model(eval_model):
                     non_personalized_itinerary, 
                     user_history, 
                     query_id, 
-                    eval_model
+                    eval_model,
+                    query_text
                 )
                 
                 # Save evaluation data for both categories (same result applies to both)
@@ -364,12 +379,12 @@ async def run_evaluations():
     total_evals = total_combinations * len(EVAL_MODELS)
     print(f"Total personalization evaluations to perform: {total_evals} ({total_combinations} combinations × {len(EVAL_MODELS)} eval models)")
     
-    # Process evaluations for llama4 only (gpt-5 commented)
+    # Process evaluations
     tasks = []
     tasks.append(process_evaluations_for_model("llama4"))
     
     # Process GPT-5 evaluations (commented out)
-    # tasks.append(process_evaluations_for_model("gpt-5"))
+    tasks.append(process_evaluations_for_model("gpt-5"))
     
     await asyncio.gather(*tasks)
 

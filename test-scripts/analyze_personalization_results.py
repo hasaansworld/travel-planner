@@ -258,21 +258,21 @@ def main():
     create_personalization_charts(llama_results, "llama4")
     create_win_rate_chart(llama_results, "llama4")
     
-    # Process GPT-5 evaluations (commented out)
-    # print("\n" + "="*50)
-    # print("Processing GPT-5 personalization evaluations...")
-    # gpt_results, gpt_evals = process_model_evaluations("gpt-5", "gpt")
-    # 
-    # # Save GPT-5 results to separate JSON
-    # gpt_json_path = RESULTS_DIR / "personalization_results_gpt5.json"
-    # with open(gpt_json_path, 'w', encoding='utf-8') as f:
-    #     json.dump(gpt_results, f, ensure_ascii=False, indent=2)
-    # print(f"GPT-5 personalization results saved to {gpt_json_path}")
-    # 
-    # # Create charts for GPT-5
-    # print("Creating charts for GPT-5 personalization evaluations...")
-    # create_personalization_charts(gpt_results, "gpt-5")
-    # create_win_rate_chart(gpt_results, "gpt-5")
+    # Process GPT-5 evaluations 
+    print("\n" + "="*50)
+    print("Processing GPT-5 personalization evaluations...")
+    gpt_results, gpt_evals = process_model_evaluations("gpt-5", "gpt")
+    
+    # Save GPT-5 results to separate JSON
+    gpt_json_path = RESULTS_DIR / "personalization_results_gpt5.json"
+    with open(gpt_json_path, 'w', encoding='utf-8') as f:
+        json.dump(gpt_results, f, ensure_ascii=False, indent=2)
+    print(f"GPT-5 personalization results saved to {gpt_json_path}")
+    
+    # Create charts for GPT-5
+    print("Creating charts for GPT-5 personalization evaluations...")
+    create_personalization_charts(gpt_results, "gpt-5")
+    create_win_rate_chart(gpt_results, "gpt-5")
     
     print(f"\nPersonalization analysis complete! Results saved in {RESULTS_DIR}")
 

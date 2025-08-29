@@ -8,99 +8,99 @@
     "plans_all_passed": 12
   },
   "gpt_medium": {
-    "micro_pass": 74.0625,
+    "micro_pass": 74.72727272727273,
     "macro_pass": 0.0,
-    "total_plans": 35,
-    "total_passed": 711,
-    "total_constraints": 960,
+    "total_plans": 40,
+    "total_passed": 822,
+    "total_constraints": 1100,
     "plans_all_passed": 0
   },
   "gpt_hard": {
-    "micro_pass": 67.83439490445859,
+    "micro_pass": 67.03821656050955,
     "macro_pass": 0.0,
-    "total_plans": 20,
-    "total_passed": 426,
-    "total_constraints": 628,
+    "total_plans": 40,
+    "total_passed": 842,
+    "total_constraints": 1256,
     "plans_all_passed": 0
   },
   "gpt_total": {
-    "micro_pass": 74.34077079107504,
-    "macro_pass": 12.631578947368421,
-    "total_plans": 95,
-    "total_passed": 1466,
-    "total_constraints": 1972,
+    "micro_pass": 72.73722627737226,
+    "macro_pass": 10.0,
+    "total_plans": 120,
+    "total_passed": 1993,
+    "total_constraints": 2740,
     "plans_all_passed": 12
   },
   "llama_easy": {
-    "micro_pass": 71.875,
-    "macro_pass": 5.0,
-    "total_plans": 20,
-    "total_passed": 138,
-    "total_constraints": 192,
-    "plans_all_passed": 1
+    "micro_pass": 74.7340425531915,
+    "macro_pass": 15.0,
+    "total_plans": 40,
+    "total_passed": 281,
+    "total_constraints": 376,
+    "plans_all_passed": 6
   },
   "llama_medium": {
-    "micro_pass": 55.27272727272727,
+    "micro_pass": 55.74074074074075,
     "macro_pass": 0.0,
-    "total_plans": 20,
-    "total_passed": 304,
-    "total_constraints": 550,
+    "total_plans": 40,
+    "total_passed": 602,
+    "total_constraints": 1080,
     "plans_all_passed": 0
   },
   "llama_hard": {
-    "micro_pass": 46.17834394904459,
+    "micro_pass": 46.25796178343949,
     "macro_pass": 0.0,
-    "total_plans": 20,
-    "total_passed": 290,
-    "total_constraints": 628,
+    "total_plans": 40,
+    "total_passed": 581,
+    "total_constraints": 1256,
     "plans_all_passed": 0
   },
   "llama_total": {
-    "micro_pass": 53.43065693430656,
-    "macro_pass": 1.6666666666666667,
-    "total_plans": 60,
-    "total_passed": 732,
-    "total_constraints": 1370,
-    "plans_all_passed": 1
+    "micro_pass": 53.98230088495575,
+    "macro_pass": 5.0,
+    "total_plans": 120,
+    "total_passed": 1464,
+    "total_constraints": 2712,
+    "plans_all_passed": 6
   },
   "deepseek_easy": {
     "micro_pass": 80.72916666666666,
     "macro_pass": 20.0,
-    "total_plans": 20,
-    "total_passed": 155,
-    "total_constraints": 192,
-    "plans_all_passed": 4
+    "total_plans": 40,
+    "total_passed": 310,
+    "total_constraints": 384,
+    "plans_all_passed": 8
   },
   "deepseek_medium": {
-    "micro_pass": 65.27272727272727,
+    "micro_pass": 64.36363636363637,
     "macro_pass": 0.0,
-    "total_plans": 20,
-    "total_passed": 359,
-    "total_constraints": 550,
+    "total_plans": 40,
+    "total_passed": 708,
+    "total_constraints": 1100,
     "plans_all_passed": 0
   },
   "deepseek_hard": {
-    "micro_pass": 57.09728867623605,
+    "micro_pass": 59.04382470119523,
     "macro_pass": 0.0,
-    "total_plans": 20,
-    "total_passed": 358,
-    "total_constraints": 627,
+    "total_plans": 40,
+    "total_passed": 741,
+    "total_constraints": 1255,
     "plans_all_passed": 0
   },
   "deepseek_total": {
-    "micro_pass": 63.69612856099343,
+    "micro_pass": 64.2205184373859,
     "macro_pass": 6.666666666666667,
-    "total_plans": 60,
-    "total_passed": 872,
-    "total_constraints": 1369,
-    "plans_all_passed": 4
+    "total_plans": 120,
+    "total_passed": 1759,
+    "total_constraints": 2739,
+    "plans_all_passed": 8
   },
   "total": {
-    "micro_pass": 65.16663128847378,
-    "macro_pass": 7.906976744186046,
-    "total_plans": 215,
-    "total_passed": 3070,
-    "total_constraints": 4711,
-    "plans_all_passed": 17
+    "micro_pass": 63.67964839457942,
+    "macro_pass": 7.222222222222221,
+    "total_plans": 360,
+    "total_passed": 5216,
+    "total_constraints": 8191,
+    "plans_all_passed": 26
   }
 }
