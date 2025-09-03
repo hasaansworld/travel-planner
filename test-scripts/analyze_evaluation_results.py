@@ -183,8 +183,8 @@ def create_improved_plots(results_data, eval_model):
     difficulties = ['easy', 'medium', 'hard']
     models = ['gpt', 'llama', 'deepseek']
     
-    # Create 2x2 subplot layout
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    # Create 1x4 subplot layout (single row)
+    fig, axes = plt.subplots(1, 4, figsize=(24, 6))
     fig.suptitle(f'Evaluation Results - {eval_model.upper()}', fontsize=20, fontweight='bold', y=0.95)
     
     # Create a horizontal legend at the top
@@ -207,9 +207,7 @@ def create_improved_plots(results_data, eval_model):
     
     # Plot each difficulty level in first 3 subplots
     for i, difficulty in enumerate(difficulties):
-        row = i // 2
-        col = i % 2
-        ax = axes[row, col]
+        ax = axes[i]
         
         # Extract data for this difficulty
         micro_scores = []
@@ -279,8 +277,8 @@ def create_improved_plots(results_data, eval_model):
                    fontsize=18, fontweight='bold', color='black')
         
     
-    # Plot total results in bottom-right subplot
-    ax = axes[1, 1]
+    # Plot total results in fourth subplot
+    ax = axes[3]
     
     # Extract total data
     micro_scores = []
@@ -349,9 +347,9 @@ def create_improved_plots(results_data, eval_model):
                fontsize=18, fontweight='bold', color='black')
     
     
-    # Adjust layout and save with proper spacing for title, legend, and category names
+    # Adjust layout and save with proper spacing for single row layout
     plt.tight_layout()
-    plt.subplots_adjust(top=0.80, hspace=0.25, wspace=0.15)
+    plt.subplots_adjust(top=0.70, wspace=0.2)
     
     # Save chart
     chart_path = RESULTS_DIR / f"evaluation_results_{eval_model}_improved.png"
