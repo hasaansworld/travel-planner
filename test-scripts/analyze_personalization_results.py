@@ -131,7 +131,7 @@ def process_model_evaluations(eval_model, eval_model_folder):
     return results, evaluations
 
 def create_improved_personalization_plots(results_data, eval_model):
-    """Create improved personalization plots with 4x2 layout"""
+    """Create plots showing total personalization results and differences"""
     
     # Define colors for models (same as evaluation script)
     model_colors = {
@@ -140,13 +140,12 @@ def create_improved_personalization_plots(results_data, eval_model):
         'deepseek': ['#2ca02c', '#4bb84b']  # Green (normal, slightly lighter)
     }
     
-    # Define difficulty levels and model names
-    difficulties = ['easy', 'medium', 'hard']
+    # Define model names
     models = ['gpt', 'llama', 'deepseek']
     
-    # Create 4x2 subplot layout (4 rows, 2 columns)
-    fig, axes = plt.subplots(4, 2, figsize=(16, 24))
-    fig.suptitle(f'Personalization Results - {eval_model.upper()}', fontsize=20, fontweight='bold', y=0.93)
+    # Create 1x2 subplots (personalization scores and differences)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+    fig.suptitle(f'Personalization Results - {eval_model.upper()}', fontsize=20, fontweight='bold', y=0.99)
     
     # Create a horizontal legend at the top
     legend_elements = []
@@ -162,100 +161,11 @@ def create_improved_personalization_plots(results_data, eval_model):
         legend_elements.append(plt.Rectangle((0, 0), 1, 1, facecolor=model_colors[model][1], alpha=0.7, 
                                            label=f'{model_name} Non-personalized'))
     
-    # Add the legend at the top in two rows with larger text
-    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.91), 
-              ncol=3, fontsize=15, frameon=True, fancybox=True, shadow=True)
+    # Add the legend at the top
+    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.93), 
+              ncol=3, fontsize=15, frameon=True, fancybox=True)
     
-    # Function to create a subplot
-    def create_subplot(ax, title, personalized_scores, non_personalized_scores, is_diff=False):
-        # Create bars with increased spacing between models
-        x = np.arange(len(models)) * 1.5
-        width = 0.35
-        gap = 0.2
-        
-        if not is_diff:
-            # Regular bars for actual scores
-            bars_personalized = ax.bar(x - width/2 - gap/2, personalized_scores, width, 
-                                       color=[model_colors[model][0] for model in models], 
-                                       alpha=0.9)
-            bars_non_personalized = ax.bar(x + width/2 + gap/2, non_personalized_scores, width,
-                                           color=[model_colors[model][1] for model in models], 
-                                           alpha=0.7)
-            
-            # Add scores on top of bars
-            for j, (bar_personalized, bar_non_personalized) in enumerate(zip(bars_personalized, bars_non_personalized)):
-                height_personalized = bar_personalized.get_height()
-                ax.text(bar_personalized.get_x() + bar_personalized.get_width()/2., height_personalized + 0.1,
-                       f'{height_personalized:.1f}', ha='center', va='bottom', 
-                       fontsize=12, fontweight='bold', color='black')
-                
-                height_non_personalized = bar_non_personalized.get_height()
-                ax.text(bar_non_personalized.get_x() + bar_non_personalized.get_width()/2., height_non_personalized + 0.1,
-                       f'{height_non_personalized:.1f}', ha='center', va='bottom', 
-                       fontsize=12, fontweight='bold', color='black')
-            
-            ax.set_ylabel('Personalization Score', fontsize=12)
-            ax.set_ylim(0, 11)
-        else:
-            # Single bars for differences
-            diff_scores = [p - n for p, n in zip(personalized_scores, non_personalized_scores)]
-            bars = ax.bar(x, diff_scores, width * 2 + gap, 
-                         color=[model_colors[model][0] for model in models], 
-                         alpha=0.9)
-            
-            # Add difference scores on top of bars
-            for j, bar in enumerate(bars):
-                height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height + 0.05,
-                       f'{height:.1f}', ha='center', va='bottom', 
-                       fontsize=12, fontweight='bold', color='black')
-            
-            ax.set_ylabel('Score Difference', fontsize=12)
-            ax.set_ylim(0, 4)
-        
-        # Formatting
-        ax.set_xticks(x)
-        ax.set_xticklabels([''] * len(models))
-        ax.grid(True, alpha=0.3, axis='y')
-        ax.set_title(title, fontsize=16, fontweight='bold', pad=5, color='#333333')
-        
-        # Add model name labels below the figure
-        for j, model in enumerate(models):
-            if model == 'gpt':
-                model_name = 'GPT'
-            else:
-                model_name = model.capitalize()
-            
-            # Adjust label position based on scale
-            y_pos = -0.5 if not is_diff else -0.2
-            ax.text(x[j], y_pos, model_name, ha='center', va='top', 
-                   fontsize=18, fontweight='bold', color='black')
-    
-    # ROWS 1-2: Actual Scores
-    subplot_positions = [(0, 0), (0, 1), (1, 0), (1, 1)]  # easy, medium, hard, total
-    
-    # Easy, Medium, Hard
-    for i, difficulty in enumerate(difficulties):
-        row, col = subplot_positions[i]
-        ax = axes[row, col]
-        
-        # Extract data for this difficulty
-        personalized_scores = []
-        non_personalized_scores = []
-        
-        for model in models:
-            key = f"{model}_{difficulty}"
-            if key in results_data:
-                personalized_scores.append(results_data[key]["avg_personalized"])
-                non_personalized_scores.append(results_data[key]["avg_non_personalized"])
-            else:
-                personalized_scores.append(0)
-                non_personalized_scores.append(0)
-        
-        create_subplot(ax, difficulty.upper(), personalized_scores, non_personalized_scores)
-    
-    # Total
-    ax = axes[1, 1]
+    # Extract total data
     personalized_scores = []
     non_personalized_scores = []
     
@@ -268,75 +178,83 @@ def create_improved_personalization_plots(results_data, eval_model):
             personalized_scores.append(0)
             non_personalized_scores.append(0)
     
-    create_subplot(ax, 'TOTAL', personalized_scores, non_personalized_scores)
+    # SUBPLOT 1: Personalization Scores
+    x = np.arange(len(models)) * 1.5
+    width = 0.35
+    gap = 0.2
     
-    # Add "Difference Scores" title between rows 2 and 3 with gaps
-    fig.text(0.5, 0.42, 'Difference Scores', ha='center', va='center', 
-             fontsize=18, fontweight='bold', color='#333333', 
-             bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8))
+    bars_personalized = ax1.bar(x - width/2 - gap/2, personalized_scores, width, 
+                                color=[model_colors[model][0] for model in models], 
+                                alpha=0.9)
+    bars_non_personalized = ax1.bar(x + width/2 + gap/2, non_personalized_scores, width,
+                                    color=[model_colors[model][1] for model in models], 
+                                    alpha=0.7)
     
-    # ROWS 3-4: Difference Scores
-    diff_positions = [(2, 0), (2, 1), (3, 0), (3, 1)]  # easy, medium, hard, total
-    
-    # Easy, Medium, Hard differences
-    for i, difficulty in enumerate(difficulties):
-        row, col = diff_positions[i]
-        ax = axes[row, col]
+    # Add scores on top of bars
+    for j, (bar_personalized, bar_non_personalized, model) in enumerate(zip(bars_personalized, bars_non_personalized, models)):
+        height_personalized = bar_personalized.get_height()
+        ax1.text(bar_personalized.get_x() + bar_personalized.get_width()/2., height_personalized + 0.1,
+                f'{height_personalized:.1f}', ha='center', va='bottom', 
+                fontsize=14, fontweight='bold', color='black')
         
-        # Extract data for this difficulty
-        personalized_scores = []
-        non_personalized_scores = []
-        
-        for model in models:
-            key = f"{model}_{difficulty}"
-            if key in results_data:
-                personalized_scores.append(results_data[key]["avg_personalized"])
-                non_personalized_scores.append(results_data[key]["avg_non_personalized"])
-            else:
-                personalized_scores.append(0)
-                non_personalized_scores.append(0)
-        
-        create_subplot(ax, f'DIFFERENCE ({difficulty.upper()})', personalized_scores, non_personalized_scores, is_diff=True)
+        height_non_personalized = bar_non_personalized.get_height()
+        ax1.text(bar_non_personalized.get_x() + bar_non_personalized.get_width()/2., height_non_personalized + 0.1,
+                f'{height_non_personalized:.1f}', ha='center', va='bottom', 
+                fontsize=14, fontweight='bold', color='black')
     
-    # Total difference
-    ax = axes[3, 1]
-    personalized_scores = []
-    non_personalized_scores = []
+    # Formatting for first subplot
+    ax1.set_ylabel('Personalization Score', fontsize=16)
+    ax1.set_title('Personalization Scores', fontsize=16, fontweight='bold', pad=12)
+    ax1.set_ylim(0, 11)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels([''] * len(models))
+    ax1.grid(True, alpha=0.3, axis='y')
     
-    for model in models:
-        key = f"{model}_total"
-        if key in results_data:
-            personalized_scores.append(results_data[key]["avg_personalized"])
-            non_personalized_scores.append(results_data[key]["avg_non_personalized"])
+    # Add model name labels below first subplot
+    for j, model in enumerate(models):
+        if model == 'gpt':
+            model_name = 'GPT'
         else:
-            personalized_scores.append(0)
-            non_personalized_scores.append(0)
+            model_name = model.capitalize()
+        
+        ax1.text(x[j], -0.5, model_name, ha='center', va='top', 
+                fontsize=18, fontweight='bold', color='black')
     
-    create_subplot(ax, 'DIFFERENCE (TOTAL)', personalized_scores, non_personalized_scores, is_diff=True)
+    # SUBPLOT 2: Difference Scores
+    diff_scores = [p - n for p, n in zip(personalized_scores, non_personalized_scores)]
     
-    # Manually position subplots with proper spacing (no tight_layout)
-    subplot_height = 0.16
-    subplot_width = 0.38
-    left_x = 0.08
-    right_x = 0.54
+    bars_diff = ax2.bar(x, diff_scores, width * 2 + gap, 
+                        color=[model_colors[model][0] for model in models], 
+                        alpha=0.9)
     
-    row_positions = [
-        0.69,  # Row 1 (Easy, Medium) - moved up for more space
-        0.48,  # Row 2 (Hard, Total) - increased gap from row 1
-        # Large gap here for "Difference Scores" heading
-        0.22,  # Row 3 (Difference Easy, Medium) - moved down for gap from heading
-        0.01   # Row 4 (Difference Hard, Total) - increased gap from row 3
-    ]
+    # Add difference scores on top of bars
+    for j, bar in enumerate(bars_diff):
+        height = bar.get_height()
+        ax2.text(bar.get_x() + bar.get_width()/2., height + 0.05,
+                f'{height:.1f}', ha='center', va='bottom', 
+                fontsize=14, fontweight='bold', color='black')
     
-    # Set positions manually
-    axes[0, 0].set_position([left_x, row_positions[0], subplot_width, subplot_height])   # Easy
-    axes[0, 1].set_position([right_x, row_positions[0], subplot_width, subplot_height])  # Medium
-    axes[1, 0].set_position([left_x, row_positions[1], subplot_width, subplot_height])   # Hard
-    axes[1, 1].set_position([right_x, row_positions[1], subplot_width, subplot_height])  # Total
-    axes[2, 0].set_position([left_x, row_positions[2], subplot_width, subplot_height])   # Diff Easy
-    axes[2, 1].set_position([right_x, row_positions[2], subplot_width, subplot_height])  # Diff Medium
-    axes[3, 0].set_position([left_x, row_positions[3], subplot_width, subplot_height])   # Diff Hard
-    axes[3, 1].set_position([right_x, row_positions[3], subplot_width, subplot_height])  # Diff Total
+    # Formatting for second subplot
+    ax2.set_ylabel('Score Difference', fontsize=16)
+    ax2.set_title('Difference Scores', fontsize=16, fontweight='bold', pad=12)
+    ax2.set_ylim(0, 4)
+    ax2.set_xticks(x)
+    ax2.set_xticklabels([''] * len(models))
+    ax2.grid(True, alpha=0.3, axis='y')
+    
+    # Add model name labels below second subplot
+    for j, model in enumerate(models):
+        if model == 'gpt':
+            model_name = 'GPT'
+        else:
+            model_name = model.capitalize()
+        
+        ax2.text(x[j], -0.2, model_name, ha='center', va='top', 
+                fontsize=18, fontweight='bold', color='black')
+    
+    # Adjust layout
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.75, wspace=0.3)
     
     # Save chart
     chart_path = RESULTS_DIR / f"personalization_results_{eval_model}_improved.png"
