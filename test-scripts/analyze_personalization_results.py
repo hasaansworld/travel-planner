@@ -144,26 +144,8 @@ def create_improved_personalization_plots(results_data, eval_model):
     models = ['gpt', 'llama', 'deepseek']
     
     # Create 1x2 subplots (personalization scores and differences)
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
-    fig.suptitle(f'Personalization Results - {eval_model.upper()}', fontsize=20, fontweight='bold', y=0.99)
-    
-    # Create a horizontal legend at the top
-    legend_elements = []
-    for model in models:
-        if model == 'gpt':
-            model_name = 'GPT'
-        else:
-            model_name = model.capitalize()
-        
-        # Add personalized and non-personalized entries for each model
-        legend_elements.append(plt.Rectangle((0, 0), 1, 1, facecolor=model_colors[model][0], alpha=0.9, 
-                                           label=f'{model_name} Personalized'))
-        legend_elements.append(plt.Rectangle((0, 0), 1, 1, facecolor=model_colors[model][1], alpha=0.7, 
-                                           label=f'{model_name} Non-personalized'))
-    
-    # Add the legend at the top
-    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.93), 
-              ncol=3, fontsize=15, frameon=True, fancybox=True)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(19, 8), gridspec_kw={'width_ratios': [1.1, 0.9]}) 
+    fig.suptitle(f'Personalization Results - judged by {eval_model.upper()}', fontsize=20, fontweight='bold', y=0.99)
     
     # Extract total data
     personalized_scores = []
@@ -179,7 +161,7 @@ def create_improved_personalization_plots(results_data, eval_model):
             non_personalized_scores.append(0)
     
     # SUBPLOT 1: Personalization Scores
-    x = np.arange(len(models)) * 1.5
+    x = np.arange(len(models)) * 2.2
     width = 0.35
     gap = 0.2
     
@@ -191,7 +173,7 @@ def create_improved_personalization_plots(results_data, eval_model):
                                     alpha=0.7)
     
     # Add scores on top of bars
-    for j, (bar_personalized, bar_non_personalized, model) in enumerate(zip(bars_personalized, bars_non_personalized, models)):
+    for j, (bar_personalized, bar_non_personalized) in enumerate(zip(bars_personalized, bars_non_personalized)):
         height_personalized = bar_personalized.get_height()
         ax1.text(bar_personalized.get_x() + bar_personalized.get_width()/2., height_personalized + 0.1,
                 f'{height_personalized:.1f}', ha='center', va='bottom', 
@@ -209,6 +191,7 @@ def create_improved_personalization_plots(results_data, eval_model):
     ax1.set_xticks(x)
     ax1.set_xticklabels([''] * len(models))
     ax1.grid(True, alpha=0.3, axis='y')
+    ax1.set_xlim(x[0] - 1.0, x[-1] + 1.0) # Add space before first and after last bars
     
     # Add model name labels below first subplot
     for j, model in enumerate(models):
@@ -217,13 +200,36 @@ def create_improved_personalization_plots(results_data, eval_model):
         else:
             model_name = model.capitalize()
         
-        ax1.text(x[j], -0.5, model_name, ha='center', va='top', 
+        ax1.text(x[j], -0.2, model_name, ha='center', va='top', 
                 fontsize=18, fontweight='bold', color='black')
+
+    # Create the legend with 6 items in 2 rows, 3 columns
+    legend_elements = []
+    for model in models:
+        if model == 'gpt':
+            model_name = 'GPT'
+        else:
+            model_name = model.capitalize()
+        
+        legend_elements.append(plt.Rectangle((0, 0), 1, 1, facecolor=model_colors[model][0], alpha=0.9, 
+                                           label=f'{model_name} Personalized'))
+        legend_elements.append(plt.Rectangle((0, 0), 1, 1, facecolor=model_colors[model][1], alpha=0.7, 
+                                           label=f'{model_name} Non-personalized'))
+
+    # Reorder legend elements to be in the desired 2-row, 3-column format
+    reordered_legend_elements = [
+        legend_elements[0], legend_elements[2], legend_elements[4],
+        legend_elements[1], legend_elements[3], legend_elements[5]
+    ]
+
+    # Add the legend to the top-right corner of the first subplot
+    ax1.legend(handles=reordered_legend_elements, loc='upper right', bbox_to_anchor=(1, 1), 
+              ncol=2, fontsize=15, frameon=True, fancybox=True)
     
     # SUBPLOT 2: Difference Scores
     diff_scores = [p - n for p, n in zip(personalized_scores, non_personalized_scores)]
     
-    bars_diff = ax2.bar(x, diff_scores, width * 2 + gap, 
+    bars_diff = ax2.bar(x, diff_scores, width * 2,
                         color=[model_colors[model][0] for model in models], 
                         alpha=0.9)
     
@@ -241,6 +247,7 @@ def create_improved_personalization_plots(results_data, eval_model):
     ax2.set_xticks(x)
     ax2.set_xticklabels([''] * len(models))
     ax2.grid(True, alpha=0.3, axis='y')
+    ax2.set_xlim(x[0] - 1.0, x[-1] + 1.0) # Add space before first and after last bars
     
     # Add model name labels below second subplot
     for j, model in enumerate(models):
@@ -249,12 +256,12 @@ def create_improved_personalization_plots(results_data, eval_model):
         else:
             model_name = model.capitalize()
         
-        ax2.text(x[j], -0.2, model_name, ha='center', va='top', 
+        ax2.text(x[j], -0.06, model_name, ha='center', va='top', 
                 fontsize=18, fontweight='bold', color='black')
     
     # Adjust layout
     plt.tight_layout()
-    plt.subplots_adjust(top=0.75, wspace=0.3)
+    plt.subplots_adjust(top=0.88, wspace=0.2)
     
     # Save chart
     chart_path = RESULTS_DIR / f"personalization_results_{eval_model}_improved.png"

@@ -184,7 +184,7 @@ def create_improved_plots(results_data, eval_model):
     
     # Create single subplot
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-    fig.suptitle(f'Evaluation Results - {eval_model.upper()}', fontsize=20, fontweight='bold', y=0.98)
+    fig.suptitle(f'Evaluation Results - judged by {eval_model.upper()}', fontsize=20, fontweight='bold', y=0.98)
     
     # Create a horizontal legend at the top
     legend_elements = []
