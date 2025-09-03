@@ -169,78 +169,222 @@ def process_model_evaluations(eval_model, eval_model_folder):
     
     return results, evaluations
 
-def create_bar_chart(results_data, eval_model):
-    """Create and save bar chart for a specific evaluation model"""
-    categories = list(results_data.keys())
-    micro_scores = [results_data[cat]["micro_pass"] for cat in categories]
-    macro_scores = [results_data[cat]["macro_pass"] for cat in categories]
+def create_improved_plots(results_data, eval_model):
+    """Create improved 4-subfigure plots for evaluation results"""
     
-    x = np.arange(len(categories))
+    # Define colors for models (normal and slightly lighter versions)
+    model_colors = {
+        'gpt': ['#1f77b4', '#4a90c2'],      # Blue (normal, slightly lighter)
+        'llama': ['#ff7f0e', '#ff9a3c'],    # Orange (normal, slightly lighter)
+        'deepseek': ['#2ca02c', '#4bb84b']  # Green (normal, slightly lighter)
+    }
+    
+    # Define difficulty levels and model names
+    difficulties = ['easy', 'medium', 'hard']
+    models = ['gpt', 'llama', 'deepseek']
+    
+    # Create 2x2 subplot layout
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle(f'Evaluation Results - {eval_model.upper()}', fontsize=20, fontweight='bold', y=0.95)
+    
+    # Create a horizontal legend at the top
+    legend_elements = []
+    for model in models:
+        if model == 'gpt':
+            model_name = 'GPT'
+        else:
+            model_name = model.capitalize()
+        
+        # Add micro and macro pass entries for each model
+        legend_elements.append(plt.Rectangle((0, 0), 1, 1, facecolor=model_colors[model][0], alpha=0.9, 
+                                           label=f'{model_name} Micro Pass'))
+        legend_elements.append(plt.Rectangle((0, 0), 1, 1, facecolor=model_colors[model][1], alpha=0.7, 
+                                           label=f'{model_name} Macro Pass'))
+    
+    # Add the legend at the top in two rows with larger text (positioned between title and category names)
+    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.91), 
+              ncol=3, fontsize=15, frameon=True, fancybox=True, shadow=True)
+    
+    # Plot each difficulty level in first 3 subplots
+    for i, difficulty in enumerate(difficulties):
+        row = i // 2
+        col = i % 2
+        ax = axes[row, col]
+        
+        # Extract data for this difficulty
+        micro_scores = []
+        macro_scores = []
+        
+        for model in models:
+            key = f"{model}_{difficulty}"
+            if key in results_data:
+                micro_scores.append(results_data[key]["micro_pass"])
+                macro_scores.append(results_data[key]["macro_pass"])
+            else:
+                micro_scores.append(0)
+                macro_scores.append(0)
+        
+        # Create bars with increased spacing between models
+        x = np.arange(len(models)) * 1.5  # Increase space between model groups
+        width = 0.35
+        gap = 0.2  # Increase gap between micro and macro bars
+        
+        # Create bars with updated labels
+        bars_micro = ax.bar(x - width/2 - gap/2, micro_scores, width, 
+                           color=[model_colors[model][0] for model in models], 
+                           alpha=0.9)
+        bars_macro = ax.bar(x + width/2 + gap/2, macro_scores, width,
+                           color=[model_colors[model][1] for model in models], 
+                           alpha=0.7)
+        
+        # Add percentages on top of bars and model names below bars
+        for j, (bar_micro, bar_macro, model) in enumerate(zip(bars_micro, bars_macro, models)):
+            # Format model name properly
+            if model == 'gpt':
+                model_name = 'GPT'
+            else:
+                model_name = model.capitalize()
+            
+            # Add percentage on top of micro bar
+            height_micro = bar_micro.get_height()
+            ax.text(bar_micro.get_x() + bar_micro.get_width()/2., height_micro + 1,
+                   f'{height_micro:.1f}%', ha='center', va='bottom', 
+                   fontsize=12, fontweight='bold', color='black')
+            
+            # Add percentage on top of macro bar
+            height_macro = bar_macro.get_height()
+            ax.text(bar_macro.get_x() + bar_macro.get_width()/2., height_macro + 1,
+                   f'{height_macro:.1f}%', ha='center', va='bottom', 
+                   fontsize=12, fontweight='bold', color='black')
+        
+        # Formatting
+        ax.set_ylabel('Pass Rate (%)', fontsize=12)
+        ax.set_ylim(0, 105)  # Bars start from 0 (bottom) and go up to just above 100%
+        ax.set_xticks(x)
+        ax.set_xticklabels([''] * len(models))  # Remove x-axis labels since model names are below figure
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        # Add category title outside and above the figure (closer) in dark gray
+        ax.set_title(f'{difficulty.upper()}', fontsize=16, fontweight='bold', pad=5, color='#333333')
+        
+        # Add model name labels below the figure (closer to axis)
+        for j, model in enumerate(models):
+            if model == 'gpt':
+                model_name = 'GPT'
+            else:
+                model_name = model.capitalize()
+            
+            # Position label below the figure with large font (closer to axis)
+            ax.text(x[j], -3, model_name, ha='center', va='top', 
+                   fontsize=18, fontweight='bold', color='black')
+        
+    
+    # Plot total results in bottom-right subplot
+    ax = axes[1, 1]
+    
+    # Extract total data
+    micro_scores = []
+    macro_scores = []
+    
+    for model in models:
+        key = f"{model}_total"
+        if key in results_data:
+            micro_scores.append(results_data[key]["micro_pass"])
+            macro_scores.append(results_data[key]["macro_pass"])
+        else:
+            micro_scores.append(0)
+            macro_scores.append(0)
+    
+    # Create bars with increased spacing between models
+    x = np.arange(len(models)) * 1.5  # Increase space between model groups
     width = 0.35
+    gap = 0.2  # Increase gap between micro and macro bars
     
-    fig, ax = plt.subplots(figsize=(14, 8))
-    bars1 = ax.bar(x - width/2, micro_scores, width, label='Micro Pass %', alpha=0.8)
-    bars2 = ax.bar(x + width/2, macro_scores, width, label='Macro Pass %', alpha=0.8)
+    bars_micro = ax.bar(x - width/2 - gap/2, micro_scores, width, 
+                       color=[model_colors[model][0] for model in models], 
+                       alpha=0.9)
+    bars_macro = ax.bar(x + width/2 + gap/2, macro_scores, width,
+                       color=[model_colors[model][1] for model in models], 
+                       alpha=0.7)
     
-    ax.set_xlabel('Plan Model Categories')
-    ax.set_ylabel('Pass Rate (%)')
-    ax.set_title(f'Evaluation Results ({eval_model.upper()}): Micro vs Macro Pass Rates')
+    # Add percentages on top of bars and model names below bars
+    for j, (bar_micro, bar_macro, model) in enumerate(zip(bars_micro, bars_macro, models)):
+        # Format model name properly
+        if model == 'gpt':
+            model_name = 'GPT'
+        else:
+            model_name = model.capitalize()
+        
+        # Add percentage on top of micro bar
+        height_micro = bar_micro.get_height()
+        ax.text(bar_micro.get_x() + bar_micro.get_width()/2., height_micro + 1,
+               f'{height_micro:.1f}%', ha='center', va='bottom', 
+               fontsize=12, fontweight='bold', color='black')
+        
+        # Add percentage on top of macro bar
+        height_macro = bar_macro.get_height()
+        ax.text(bar_macro.get_x() + bar_macro.get_width()/2., height_macro + 1,
+               f'{height_macro:.1f}%', ha='center', va='bottom', 
+               fontsize=12, fontweight='bold', color='black')
+    
+    # Formatting
+    ax.set_ylabel('Pass Rate (%)', fontsize=12)
+    ax.set_ylim(0, 105)  # Bars start from 0 (bottom) and go up to just above 100%
     ax.set_xticks(x)
-    ax.set_xticklabels(categories, rotation=45, ha='right')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+    ax.set_xticklabels([''] * len(models))  # Remove x-axis labels since model names are below figure
+    ax.grid(True, alpha=0.3, axis='y')
     
-    # Add value labels on bars
-    def add_value_labels(bars):
-        for bar in bars:
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height + 0.5,
-                   f'{height:.1f}%', ha='center', va='bottom', fontsize=8)
+    # Add category title outside and above the figure (closer) in dark gray
+    ax.set_title('TOTAL', fontsize=16, fontweight='bold', pad=5, color='#333333')
     
-    add_value_labels(bars1)
-    add_value_labels(bars2)
+    # Add model name labels below the figure (closer to axis)
+    for j, model in enumerate(models):
+        if model == 'gpt':
+            model_name = 'GPT'
+        else:
+            model_name = model.capitalize()
+        
+        # Position label below the figure with large font (closer to axis)
+        ax.text(x[j], -3, model_name, ha='center', va='top', 
+               fontsize=18, fontweight='bold', color='black')
     
+    
+    # Adjust layout and save with proper spacing for title, legend, and category names
     plt.tight_layout()
+    plt.subplots_adjust(top=0.80, hspace=0.25, wspace=0.15)
     
     # Save chart
-    chart_path = RESULTS_DIR / f"evaluation_results_{eval_model}.png"
-    plt.savefig(chart_path, dpi=300, bbox_inches='tight')
-    plt.show()
-    print(f"Chart saved to {chart_path}")
+    chart_path = RESULTS_DIR / f"evaluation_results_{eval_model}_improved.png"
+    plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print(f"Improved chart saved to {chart_path}")
 
 def main():
-    """Main function to process all evaluations and generate results"""
+    """Main function to read evaluation results and generate improved plots"""
     
-    # Process Llama4 evaluations
-    print("Processing Llama4 evaluations...")
-    llama_results, llama_evals = process_model_evaluations("llama4", "llama")
-    
-    # Save Llama4 results to separate JSON
+    # Read Llama4 results from JSON
+    print("Reading Llama4 evaluation results...")
     llama_json_path = RESULTS_DIR / "evaluation_results_llama4.json"
-    with open(llama_json_path, 'w', encoding='utf-8') as f:
-        json.dump(llama_results, f, ensure_ascii=False, indent=2)
-    print(f"Llama4 results saved to {llama_json_path}")
+    try:
+        with open(llama_json_path, 'r', encoding='utf-8') as f:
+            llama_results = json.load(f)
+        print("Creating improved plots for Llama4 evaluations...")
+        create_improved_plots(llama_results, "llama4")
+    except FileNotFoundError:
+        print(f"Llama4 results file not found at {llama_json_path}")
     
-    # Create bar chart for Llama4
-    print("Creating bar chart for Llama4 evaluations...")
-    create_bar_chart(llama_results, "llama4")
-    
-    # Process GPT-5 evaluations
-    print("\n" + "="*50)
-    print("Processing GPT-5 evaluations...")
-    gpt_results, gpt_evals = process_model_evaluations("gpt-5", "gpt")
-    
-    # Save GPT-5 results to separate JSON
+    # Read GPT-5 results from JSON
+    print("\nReading GPT-5 evaluation results...")
     gpt_json_path = RESULTS_DIR / "evaluation_results_gpt5.json"
-    with open(gpt_json_path, 'w', encoding='utf-8') as f:
-        json.dump(gpt_results, f, ensure_ascii=False, indent=2)
-    print(f"GPT-5 results saved to {gpt_json_path}")
+    try:
+        with open(gpt_json_path, 'r', encoding='utf-8') as f:
+            gpt_results = json.load(f)
+        print("Creating improved plots for GPT-5 evaluations...")
+        create_improved_plots(gpt_results, "gpt-5")
+    except FileNotFoundError:
+        print(f"GPT-5 results file not found at {gpt_json_path}")
     
-    # Create bar chart for GPT-5
-    print("Creating bar chart for GPT-5 evaluations...")
-    create_bar_chart(gpt_results, "gpt-5")
-    
-    print(f"\nAnalysis complete! Results saved in {RESULTS_DIR}")
+    print(f"\nImproved plots generated! Results saved in {RESULTS_DIR}")
 
 if __name__ == "__main__":
     main()
