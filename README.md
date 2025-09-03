@@ -96,7 +96,7 @@ travel-planner/
 A demo Android application is available to interact with the travel planner API:
 
 - **Source Code**: [GitHub Repository](https://github.com/hasaansworld/travel-planner-app)
-- **Download APK**: [travel_planner.apk]([/travel_planner.apk](https://github.com/hasaansworld/travel-planner/releases/download/v1.0/travel_planner.apk))
+- **Download APK**: [travel_planner.apk](https://github.com/hasaansworld/travel-planner/releases/download/v1.0/travel_planner.apk)
 
 The mobile app provides a user-friendly interface for:
 - Creating travel plans with personalized recommendations
