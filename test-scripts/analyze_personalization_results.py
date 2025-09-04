@@ -49,35 +49,51 @@ def parse_evaluation_file(file_path, plan_model, category):
         return {
             "query_id": query_id,
             "difficulty": difficulty,
-            "user_id": user_id,
             "category": category,
+            "user_id": user_id,
             "plan_model": plan_model_from_data,
             "personalized_score": personalized_score,
             "non_personalized_score": non_personalized_score,
-            "personalized_eval": personalized_eval,
-            "non_personalized_eval": non_personalized_eval
+            "personalized_explanation": personalized_eval.get("explanation", ""),
+            "non_personalized_explanation": non_personalized_eval.get("explanation", ""),
+            "score_difference": personalized_score - non_personalized_score
         }
     except Exception as e:
         print(f"Error parsing {file_path}: {e}")
         return None
 
 def calculate_metrics(evaluations):
-    """Calculate average personalized and non-personalized scores"""
+    """Calculate personalization metrics"""
     if not evaluations:
-        return {"avg_personalized": 0.0, "avg_non_personalized": 0.0, "difference": 0.0}
+        return {
+            "avg_personalized": 0.0, 
+            "avg_non_personalized": 0.0, 
+            "avg_difference": 0.0,
+            "total_evaluations": 0,
+            "personalized_wins": 0,
+            "win_rate": 0.0
+        }
     
-    total_personalized = sum(e["personalized_score"] for e in evaluations)
-    total_non_personalized = sum(e["non_personalized_score"] for e in evaluations)
+    # Calculate averages
+    personalized_scores = [e["personalized_score"] for e in evaluations]
+    non_personalized_scores = [e["non_personalized_score"] for e in evaluations]
+    differences = [e["score_difference"] for e in evaluations]
     
-    avg_personalized = total_personalized / len(evaluations)
-    avg_non_personalized = total_non_personalized / len(evaluations)
-    difference = avg_personalized - avg_non_personalized
+    avg_personalized = sum(personalized_scores) / len(personalized_scores)
+    avg_non_personalized = sum(non_personalized_scores) / len(non_personalized_scores)
+    avg_difference = sum(differences) / len(differences)
+    
+    # Count wins (personalized > non-personalized)
+    personalized_wins = sum(1 for diff in differences if diff > 0)
+    win_rate = (personalized_wins / len(evaluations)) * 100
     
     return {
         "avg_personalized": avg_personalized,
         "avg_non_personalized": avg_non_personalized,
-        "difference": difference,
-        "count": len(evaluations)
+        "avg_difference": avg_difference,
+        "total_evaluations": len(evaluations),
+        "personalized_wins": personalized_wins,
+        "win_rate": win_rate
     }
 
 def process_model_evaluations(eval_model, eval_model_folder):
@@ -85,7 +101,7 @@ def process_model_evaluations(eval_model, eval_model_folder):
     print(f"Processing personalization evaluations for {eval_model}...")
     
     eval_files = get_evaluation_files(eval_model_folder)
-    print(f"Found {len(eval_files)} personalization evaluation files for {eval_model}")
+    print(f"Found {len(eval_files)} evaluation files for {eval_model}")
     
     # Parse all evaluation files
     evaluations = []
@@ -94,7 +110,7 @@ def process_model_evaluations(eval_model, eval_model_folder):
         if parsed:
             evaluations.append(parsed)
     
-    print(f"Successfully parsed {len(evaluations)} personalization evaluations for {eval_model}")
+    print(f"Successfully parsed {len(evaluations)} evaluations for {eval_model}")
     
     # Group by plan model and difficulty
     by_plan_model_difficulty = defaultdict(lambda: defaultdict(list))
@@ -115,23 +131,23 @@ def process_model_evaluations(eval_model, eval_model_folder):
             if difficulty in by_plan_model_difficulty[plan_model]:
                 metrics = calculate_metrics(by_plan_model_difficulty[plan_model][difficulty])
                 results[f"{plan_model}_{difficulty}"] = metrics
-                print(f"{plan_model} {difficulty}: Personalized={metrics['avg_personalized']:.1f}, Non-personalized={metrics['avg_non_personalized']:.1f}, Diff={metrics['difference']:.1f}")
+                print(f"{plan_model} {difficulty}: Avg Personalized={metrics['avg_personalized']:.1f}, Avg Non-personalized={metrics['avg_non_personalized']:.1f}, Diff={metrics['avg_difference']:.1f}, Win Rate={metrics['win_rate']:.1f}%")
         
         # Overall for this plan model
         if plan_model in by_plan_model:
             overall_metrics = calculate_metrics(by_plan_model[plan_model])
             results[f"{plan_model}_total"] = overall_metrics
-            print(f"{plan_model} total: Personalized={overall_metrics['avg_personalized']:.1f}, Non-personalized={overall_metrics['avg_non_personalized']:.1f}, Diff={overall_metrics['difference']:.1f}")
+            print(f"{plan_model} total: Avg Personalized={overall_metrics['avg_personalized']:.1f}, Avg Non-personalized={overall_metrics['avg_non_personalized']:.1f}, Diff={overall_metrics['avg_difference']:.1f}, Win Rate={overall_metrics['win_rate']:.1f}%")
     
     # Calculate overall metrics across all plan models
     overall_metrics = calculate_metrics(evaluations)
     results["total"] = overall_metrics
-    print(f"Total: Personalized={overall_metrics['avg_personalized']:.1f}, Non-personalized={overall_metrics['avg_non_personalized']:.1f}, Diff={overall_metrics['difference']:.1f}")
+    print(f"Total: Avg Personalized={overall_metrics['avg_personalized']:.1f}, Avg Non-personalized={overall_metrics['avg_non_personalized']:.1f}, Diff={overall_metrics['avg_difference']:.1f}, Win Rate={overall_metrics['win_rate']:.1f}%")
     
     return results, evaluations
 
 def create_improved_personalization_plots(results_data, eval_model):
-    """Create plots showing total personalization results and differences"""
+    """Create improved personalization plots matching evaluation results style"""
     
     # Define colors for models (same as evaluation script)
     model_colors = {
@@ -140,12 +156,105 @@ def create_improved_personalization_plots(results_data, eval_model):
         'deepseek': ['#2ca02c', '#4bb84b']  # Green (normal, slightly lighter)
     }
     
-    # Define model names
+    # Define difficulty levels and model names
+    difficulties = ['easy', 'medium', 'hard']
     models = ['gpt', 'llama', 'deepseek']
     
-    # Create 1x2 subplots (personalization scores and differences)
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(19, 8), gridspec_kw={'width_ratios': [1.1, 0.9]}) 
-    fig.suptitle(f'Personalization Results - judged by {eval_model.upper()}', fontsize=20, fontweight='bold', y=0.99)
+    # Create 1x4 subplot layout (1 row, 4 columns)
+    fig, axes = plt.subplots(1, 4, figsize=(24, 8))
+    fig.suptitle(f'Personalization Evaluation - judged by {eval_model.upper()}', fontsize=20, fontweight='bold', y=0.92)
+    
+    # Create a horizontal legend at the top
+    legend_elements = []
+    for model in models:
+        if model == 'gpt':
+            model_name = 'GPT'
+        else:
+            model_name = model.capitalize()
+        
+        # Add personalized and non-personalized entries for each model
+        legend_elements.append(plt.Rectangle((0, 0), 1, 1, facecolor=model_colors[model][0], alpha=0.9, 
+                                           label=f'{model_name} Personalized'))
+        legend_elements.append(plt.Rectangle((0, 0), 1, 1, facecolor=model_colors[model][1], alpha=0.7, 
+                                           label=f'{model_name} Non-personalized'))
+    
+    # Add the legend at the top with more spacing
+    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.88), 
+              ncol=3, fontsize=18, frameon=True, fancybox=True)
+    
+    # Actual Scores
+    for i, difficulty in enumerate(difficulties):
+        ax = axes[i]
+        
+        # Extract data for this difficulty
+        personalized_scores = []
+        non_personalized_scores = []
+        
+        for model in models:
+            key = f"{model}_{difficulty}"
+            if key in results_data:
+                personalized_scores.append(results_data[key]["avg_personalized"])
+                non_personalized_scores.append(results_data[key]["avg_non_personalized"])
+            else:
+                personalized_scores.append(0)
+                non_personalized_scores.append(0)
+        
+        # Create bars with increased spacing between models
+        x = np.arange(len(models)) * 1.5  # Increase space between model groups
+        width = 0.35
+        gap = 0.2  # Increase gap between personalized and non-personalized bars
+        
+        # Create bars
+        bars_personalized = ax.bar(x - width/2 - gap/2, personalized_scores, width, 
+                                   color=[model_colors[model][0] for model in models], 
+                                   alpha=0.9)
+        bars_non_personalized = ax.bar(x + width/2 + gap/2, non_personalized_scores, width,
+                                       color=[model_colors[model][1] for model in models], 
+                                       alpha=0.7)
+        
+        # Add scores on top of bars and model names on bars
+        for j, (bar_personalized, bar_non_personalized, model) in enumerate(zip(bars_personalized, bars_non_personalized, models)):
+            # Format model name properly
+            if model == 'gpt':
+                model_name = 'GPT'
+            else:
+                model_name = model.capitalize()
+            
+            # Add score on top of personalized bar
+            height_personalized = bar_personalized.get_height()
+            ax.text(bar_personalized.get_x() + bar_personalized.get_width()/2., height_personalized + 0.1,
+                   f'{height_personalized:.1f}', ha='center', va='bottom', 
+                   fontsize=14, fontweight='bold', color='black')
+            
+            # Add score on top of non-personalized bar
+            height_non_personalized = bar_non_personalized.get_height()
+            ax.text(bar_non_personalized.get_x() + bar_non_personalized.get_width()/2., height_non_personalized + 0.1,
+                   f'{height_non_personalized:.1f}', ha='center', va='bottom', 
+                   fontsize=14, fontweight='bold', color='black')
+        
+        # Formatting
+        ax.set_ylabel('Personalization Score', fontsize=16)
+        ax.set_ylim(0, 11)  # Scores are out of 10
+        ax.set_xticks(x)
+        ax.set_xticklabels([''] * len(models))  # Remove x-axis labels since model names are below figure
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        # Add category title outside and above the figure in dark gray
+        ax.set_title(f'{difficulty.upper()}', fontsize=16, fontweight='bold', pad=5, color='#333333')
+        
+        # Add model name labels below the figure
+        for j, model in enumerate(models):
+            if model == 'gpt':
+                model_name = 'GPT'
+            else:
+                model_name = model.capitalize()
+            
+            # Position label below the figure with large font
+            ax.text(x[j], -0.5, model_name, ha='center', va='top', 
+                   fontsize=18, fontweight='bold', color='black')
+    
+    # TOTAL
+    ax = axes[3]
     
     # Extract total data
     personalized_scores = []
@@ -160,114 +269,99 @@ def create_improved_personalization_plots(results_data, eval_model):
             personalized_scores.append(0)
             non_personalized_scores.append(0)
     
-    # SUBPLOT 1: Personalization Scores
-    x = np.arange(len(models)) * 2.2
+    # Create bars with increased spacing between models
+    x = np.arange(len(models)) * 1.5
     width = 0.35
     gap = 0.2
     
-    bars_personalized = ax1.bar(x - width/2 - gap/2, personalized_scores, width, 
-                                color=[model_colors[model][0] for model in models], 
-                                alpha=0.9)
-    bars_non_personalized = ax1.bar(x + width/2 + gap/2, non_personalized_scores, width,
-                                    color=[model_colors[model][1] for model in models], 
-                                    alpha=0.7)
+    bars_personalized = ax.bar(x - width/2 - gap/2, personalized_scores, width, 
+                               color=[model_colors[model][0] for model in models], 
+                               alpha=0.9)
+    bars_non_personalized = ax.bar(x + width/2 + gap/2, non_personalized_scores, width,
+                                   color=[model_colors[model][1] for model in models], 
+                                   alpha=0.7)
     
     # Add scores on top of bars
-    for j, (bar_personalized, bar_non_personalized) in enumerate(zip(bars_personalized, bars_non_personalized)):
+    for j, (bar_personalized, bar_non_personalized, model) in enumerate(zip(bars_personalized, bars_non_personalized, models)):
+        # Format model name properly
+        if model == 'gpt':
+            model_name = 'GPT'
+        else:
+            model_name = model.capitalize()
+        
+        # Add score on top of personalized bar
         height_personalized = bar_personalized.get_height()
-        ax1.text(bar_personalized.get_x() + bar_personalized.get_width()/2., height_personalized + 0.1,
-                f'{height_personalized:.1f}', ha='center', va='bottom', 
-                fontsize=14, fontweight='bold', color='black')
+        ax.text(bar_personalized.get_x() + bar_personalized.get_width()/2., height_personalized + 0.1,
+               f'{height_personalized:.1f}', ha='center', va='bottom', 
+               fontsize=14, fontweight='bold', color='black')
         
+        # Add score on top of non-personalized bar
         height_non_personalized = bar_non_personalized.get_height()
-        ax1.text(bar_non_personalized.get_x() + bar_non_personalized.get_width()/2., height_non_personalized + 0.1,
-                f'{height_non_personalized:.1f}', ha='center', va='bottom', 
-                fontsize=14, fontweight='bold', color='black')
+        ax.text(bar_non_personalized.get_x() + bar_non_personalized.get_width()/2., height_non_personalized + 0.1,
+               f'{height_non_personalized:.1f}', ha='center', va='bottom', 
+               fontsize=14, fontweight='bold', color='black')
     
-    # Formatting for first subplot
-    ax1.set_ylabel('Personalization Score', fontsize=16)
-    ax1.set_title('Personalization Scores', fontsize=16, fontweight='bold', pad=12)
-    ax1.set_ylim(0, 11)
-    ax1.set_xticks(x)
-    ax1.set_xticklabels([''] * len(models))
-    ax1.grid(True, alpha=0.3, axis='y')
-    ax1.set_xlim(x[0] - 1.0, x[-1] + 1.0) # Add space before first and after last bars
+    # Formatting
+    ax.set_ylabel('Personalization Score', fontsize=16)
+    ax.set_ylim(0, 11)
+    ax.set_xticks(x)
+    ax.set_xticklabels([''] * len(models))
+    ax.grid(True, alpha=0.3, axis='y')
     
-    # Add model name labels below first subplot
+    # Add category title
+    ax.set_title('TOTAL', fontsize=16, fontweight='bold', pad=5, color='#333333')
+    
+    # Add model name labels below the figure
     for j, model in enumerate(models):
         if model == 'gpt':
             model_name = 'GPT'
         else:
             model_name = model.capitalize()
         
-        ax1.text(x[j], -0.2, model_name, ha='center', va='top', 
-                fontsize=18, fontweight='bold', color='black')
-
-    # Create the legend with 6 items in 2 rows, 3 columns
-    legend_elements = []
-    for model in models:
-        if model == 'gpt':
-            model_name = 'GPT'
-        else:
-            model_name = model.capitalize()
-        
-        legend_elements.append(plt.Rectangle((0, 0), 1, 1, facecolor=model_colors[model][0], alpha=0.9, 
-                                           label=f'{model_name} Personalized'))
-        legend_elements.append(plt.Rectangle((0, 0), 1, 1, facecolor=model_colors[model][1], alpha=0.7, 
-                                           label=f'{model_name} Non-personalized'))
-
-    # Reorder legend elements to be in the desired 2-row, 3-column format
-    reordered_legend_elements = [
-        legend_elements[0], legend_elements[2], legend_elements[4],
-        legend_elements[1], legend_elements[3], legend_elements[5]
-    ]
-
-    # Add the legend to the top-right corner of the first subplot
-    ax1.legend(handles=reordered_legend_elements, loc='upper right', bbox_to_anchor=(1, 1), 
-              ncol=2, fontsize=15, frameon=True, fancybox=True)
+        ax.text(x[j], -0.5, model_name, ha='center', va='top', 
+               fontsize=18, fontweight='bold', color='black')
     
-    # SUBPLOT 2: Difference Scores
-    diff_scores = [p - n for p, n in zip(personalized_scores, non_personalized_scores)]
-    
-    bars_diff = ax2.bar(x, diff_scores, width * 2,
-                        color=[model_colors[model][0] for model in models], 
-                        alpha=0.9)
-    
-    # Add difference scores on top of bars
-    for j, bar in enumerate(bars_diff):
-        height = bar.get_height()
-        ax2.text(bar.get_x() + bar.get_width()/2., height + 0.05,
-                f'{height:.1f}', ha='center', va='bottom', 
-                fontsize=14, fontweight='bold', color='black')
-    
-    # Formatting for second subplot
-    ax2.set_ylabel('Score Difference', fontsize=16)
-    ax2.set_title('Difference Scores', fontsize=16, fontweight='bold', pad=12)
-    ax2.set_ylim(0, 4)
-    ax2.set_xticks(x)
-    ax2.set_xticklabels([''] * len(models))
-    ax2.grid(True, alpha=0.3, axis='y')
-    ax2.set_xlim(x[0] - 1.0, x[-1] + 1.0) # Add space before first and after last bars
-    
-    # Add model name labels below second subplot
-    for j, model in enumerate(models):
-        if model == 'gpt':
-            model_name = 'GPT'
-        else:
-            model_name = model.capitalize()
-        
-        ax2.text(x[j], -0.06, model_name, ha='center', va='top', 
-                fontsize=18, fontweight='bold', color='black')
-    
-    # Adjust layout
+    # Adjust layout and save
     plt.tight_layout()
-    plt.subplots_adjust(top=0.88, wspace=0.2)
+    plt.subplots_adjust(top=0.70, wspace=0.2)
     
     # Save chart
     chart_path = RESULTS_DIR / f"personalization_results_{eval_model}_improved.png"
     plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
     print(f"Improved personalization chart saved to {chart_path}")
+
+def create_win_rate_chart(results_data, eval_model):
+    """Create win rate chart showing percentage of times personalized beats non-personalized"""
+    categories = list(results_data.keys())
+    win_rates = [results_data[cat]["win_rate"] for cat in categories]
+    
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    bars = ax.bar(categories, win_rates, alpha=0.8, color='#4682B4')
+    
+    ax.set_xlabel('Plan Model Categories')
+    ax.set_ylabel('Win Rate (%)')
+    ax.set_title(f'Personalized Plan Win Rate ({eval_model.upper()}): % of times personalized > non-personalized')
+    ax.set_xticklabels(categories, rotation=45, ha='right')
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim(0, 100)
+    ax.axhline(y=50, color='red', linestyle='--', alpha=0.7, label='50% baseline')
+    ax.legend()
+    
+    # Add value labels on bars
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height + 1,
+               f'{height:.1f}%', ha='center', va='bottom', fontsize=8)
+    
+    plt.tight_layout()
+    
+    # Save chart
+    chart_path = RESULTS_DIR / f"personalization_win_rates_{eval_model}.png"
+    plt.savefig(chart_path, dpi=300, bbox_inches='tight')
+    plt.show()
+    print(f"Win rate chart saved to {chart_path}")
 
 def main():
     """Main function to read personalization results and generate improved plots"""
@@ -281,7 +375,7 @@ def main():
         print("Creating improved plots for Llama4 personalization evaluations...")
         create_improved_personalization_plots(llama_results, "llama4")
     except FileNotFoundError:
-        print(f"Llama4 personalization results file not found at {llama_json_path}")
+        print(f"Llama4 results file not found at {llama_json_path}")
     
     # Read GPT-5 results from JSON
     print("\nReading GPT-5 personalization results...")
@@ -292,7 +386,7 @@ def main():
         print("Creating improved plots for GPT-5 personalization evaluations...")
         create_improved_personalization_plots(gpt_results, "gpt-5")
     except FileNotFoundError:
-        print(f"GPT-5 personalization results file not found at {gpt_json_path}")
+        print(f"GPT-5 results file not found at {gpt_json_path}")
     
     print(f"\nImproved personalization plots generated! Results saved in {RESULTS_DIR}")
 

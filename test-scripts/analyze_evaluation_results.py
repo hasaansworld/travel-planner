@@ -170,7 +170,7 @@ def process_model_evaluations(eval_model, eval_model_folder):
     return results, evaluations
 
 def create_improved_plots(results_data, eval_model):
-    """Create single plot showing only total results"""
+    """Create improved 4-subfigure plots for evaluation results"""
     
     # Define colors for models (normal and slightly lighter versions)
     model_colors = {
@@ -179,12 +179,13 @@ def create_improved_plots(results_data, eval_model):
         'deepseek': ['#2ca02c', '#4bb84b']  # Green (normal, slightly lighter)
     }
     
-    # Define model names
+    # Define difficulty levels and model names
+    difficulties = ['easy', 'medium', 'hard']
     models = ['gpt', 'llama', 'deepseek']
     
-    # Create single subplot
-    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-    fig.suptitle(f'Evaluation Results - judged by {eval_model.upper()}', fontsize=20, fontweight='bold', y=0.98)
+    # Create 1x4 subplot layout (single row)
+    fig, axes = plt.subplots(1, 4, figsize=(24, 8))
+    fig.suptitle(f'Quality Evaluation - judged by {eval_model.upper()}', fontsize=20, fontweight='bold', y=0.92)
     
     # Create a horizontal legend at the top
     legend_elements = []
@@ -200,9 +201,84 @@ def create_improved_plots(results_data, eval_model):
         legend_elements.append(plt.Rectangle((0, 0), 1, 1, facecolor=model_colors[model][1], alpha=0.7, 
                                            label=f'{model_name} Macro Pass'))
     
-    # Add the legend at the top
-    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.92), 
-              ncol=3, fontsize=15, frameon=True, fancybox=True)
+    # Add the legend at the top in two rows with larger text (positioned between title and category names)
+    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.88), 
+              ncol=3, fontsize=18, frameon=True, fancybox=True)
+    
+    # Plot each difficulty level in first 3 subplots
+    for i, difficulty in enumerate(difficulties):
+        ax = axes[i]
+        
+        # Extract data for this difficulty
+        micro_scores = []
+        macro_scores = []
+        
+        for model in models:
+            key = f"{model}_{difficulty}"
+            if key in results_data:
+                micro_scores.append(results_data[key]["micro_pass"])
+                macro_scores.append(results_data[key]["macro_pass"])
+            else:
+                micro_scores.append(0)
+                macro_scores.append(0)
+        
+        # Create bars with increased spacing between models
+        x = np.arange(len(models)) * 1.5  # Increase space between model groups
+        width = 0.35
+        gap = 0.2  # Increase gap between micro and macro bars
+        
+        # Create bars with updated labels
+        bars_micro = ax.bar(x - width/2 - gap/2, micro_scores, width, 
+                           color=[model_colors[model][0] for model in models], 
+                           alpha=0.9)
+        bars_macro = ax.bar(x + width/2 + gap/2, macro_scores, width,
+                           color=[model_colors[model][1] for model in models], 
+                           alpha=0.7)
+        
+        # Add percentages on top of bars and model names below bars
+        for j, (bar_micro, bar_macro, model) in enumerate(zip(bars_micro, bars_macro, models)):
+            # Format model name properly
+            if model == 'gpt':
+                model_name = 'GPT'
+            else:
+                model_name = model.capitalize()
+            
+            # Add percentage on top of micro bar
+            height_micro = bar_micro.get_height()
+            ax.text(bar_micro.get_x() + bar_micro.get_width()/2., height_micro + 1,
+                   f'{height_micro:.1f}%', ha='center', va='bottom', 
+                   fontsize=14, fontweight='bold', color='black')
+            
+            # Add percentage on top of macro bar
+            height_macro = bar_macro.get_height()
+            ax.text(bar_macro.get_x() + bar_macro.get_width()/2., height_macro + 1,
+                   f'{height_macro:.1f}%', ha='center', va='bottom', 
+                   fontsize=14, fontweight='bold', color='black')
+        
+        # Formatting
+        ax.set_ylabel('Pass Rate (%)', fontsize=16)
+        ax.set_ylim(0, 105)  # Bars start from 0 (bottom) and go up to just above 100%
+        ax.set_xticks(x)
+        ax.set_xticklabels([''] * len(models))  # Remove x-axis labels since model names are below figure
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        # Add category title outside and above the figure (closer) in dark gray
+        ax.set_title(f'{difficulty.upper()}', fontsize=16, fontweight='bold', pad=5, color='#333333')
+        
+        # Add model name labels below the figure (closer to axis)
+        for j, model in enumerate(models):
+            if model == 'gpt':
+                model_name = 'GPT'
+            else:
+                model_name = model.capitalize()
+            
+            # Position label below the figure with large font (closer to axis)
+            ax.text(x[j], -3, model_name, ha='center', va='top', 
+                   fontsize=18, fontweight='bold', color='black')
+        
+    
+    # Plot total results in fourth subplot
+    ax = axes[3]
     
     # Extract total data
     micro_scores = []
@@ -218,9 +294,9 @@ def create_improved_plots(results_data, eval_model):
             macro_scores.append(0)
     
     # Create bars with increased spacing between models
-    x = np.arange(len(models)) * 1.5
+    x = np.arange(len(models)) * 1.5  # Increase space between model groups
     width = 0.35
-    gap = 0.2
+    gap = 0.2  # Increase gap between micro and macro bars
     
     bars_micro = ax.bar(x - width/2 - gap/2, micro_scores, width, 
                        color=[model_colors[model][0] for model in models], 
@@ -229,8 +305,14 @@ def create_improved_plots(results_data, eval_model):
                        color=[model_colors[model][1] for model in models], 
                        alpha=0.7)
     
-    # Add percentages on top of bars
+    # Add percentages on top of bars and model names below bars
     for j, (bar_micro, bar_macro, model) in enumerate(zip(bars_micro, bars_macro, models)):
+        # Format model name properly
+        if model == 'gpt':
+            model_name = 'GPT'
+        else:
+            model_name = model.capitalize()
+        
         # Add percentage on top of micro bar
         height_micro = bar_micro.get_height()
         ax.text(bar_micro.get_x() + bar_micro.get_width()/2., height_micro + 1,
@@ -245,24 +327,29 @@ def create_improved_plots(results_data, eval_model):
     
     # Formatting
     ax.set_ylabel('Pass Rate (%)', fontsize=16)
-    ax.set_ylim(0, 105)
+    ax.set_ylim(0, 105)  # Bars start from 0 (bottom) and go up to just above 100%
     ax.set_xticks(x)
-    ax.set_xticklabels([''] * len(models))
+    ax.set_xticklabels([''] * len(models))  # Remove x-axis labels since model names are below figure
     ax.grid(True, alpha=0.3, axis='y')
     
-    # Add model name labels below the figure
+    # Add category title outside and above the figure (closer) in dark gray
+    ax.set_title('TOTAL', fontsize=16, fontweight='bold', pad=5, color='#333333')
+    
+    # Add model name labels below the figure (closer to axis)
     for j, model in enumerate(models):
         if model == 'gpt':
             model_name = 'GPT'
         else:
             model_name = model.capitalize()
         
+        # Position label below the figure with large font (closer to axis)
         ax.text(x[j], -3, model_name, ha='center', va='top', 
-               fontsize=20, fontweight='bold', color='black')
+               fontsize=18, fontweight='bold', color='black')
     
-    # Adjust layout
+    
+    # Adjust layout and save with proper spacing for single row layout
     plt.tight_layout()
-    plt.subplots_adjust(top=0.78)
+    plt.subplots_adjust(top=0.70, wspace=0.2)
     
     # Save chart
     chart_path = RESULTS_DIR / f"evaluation_results_{eval_model}_improved.png"
