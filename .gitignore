@@ -6,3 +6,4 @@ cache
 test-scripts/travel-plans
 test-scripts/plan_evals
 test-scripts/personalization_evals
+test-scripts/results/variations
