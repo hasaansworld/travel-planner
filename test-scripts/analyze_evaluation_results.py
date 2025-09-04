@@ -351,11 +351,13 @@ def create_improved_plots(results_data, eval_model):
     plt.tight_layout()
     plt.subplots_adjust(top=0.70, wspace=0.2)
     
-    # Save chart
-    chart_path = RESULTS_DIR / f"evaluation_results_{eval_model}_improved.png"
-    plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor='white')
+    # Save chart in both PNG and PDF formats
+    chart_path_png = RESULTS_DIR / f"evaluation_results_{eval_model}.png"
+    chart_path_pdf = RESULTS_DIR / f"evaluation_results_{eval_model}.pdf"
+    plt.savefig(chart_path_png, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.savefig(chart_path_pdf, bbox_inches='tight', facecolor='white')
     plt.close()
-    print(f"Improved chart saved to {chart_path}")
+    print(f"Chart saved to {chart_path_png} and {chart_path_pdf}")
 
 def main():
     """Main function to read evaluation results and generate improved plots"""
@@ -366,7 +368,7 @@ def main():
     try:
         with open(llama_json_path, 'r', encoding='utf-8') as f:
             llama_results = json.load(f)
-        print("Creating improved plots for Llama4 evaluations...")
+        print("Creating plots for Llama4 evaluations...")
         create_improved_plots(llama_results, "llama4")
     except FileNotFoundError:
         print(f"Llama4 results file not found at {llama_json_path}")
@@ -377,12 +379,12 @@ def main():
     try:
         with open(gpt_json_path, 'r', encoding='utf-8') as f:
             gpt_results = json.load(f)
-        print("Creating improved plots for GPT-5 evaluations...")
+        print("Creating plots for GPT-5 evaluations...")
         create_improved_plots(gpt_results, "gpt-5")
     except FileNotFoundError:
         print(f"GPT-5 results file not found at {gpt_json_path}")
     
-    print(f"\nImproved plots generated! Results saved in {RESULTS_DIR}")
+    print(f"\nPlots generated! Results saved in {RESULTS_DIR}")
 
 if __name__ == "__main__":
     main()
